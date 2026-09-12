@@ -1,1 +1,1 @@
-__LOAD_FROM__:/workspace/tor-comply-mvp/requirements.seed.json
+{"source": "workspace/tor_v3.txt (from กพบ TOR PDF)", "parser": "heading-regex-v0-no-llm", "projectSeed": "กพบ-internet-lease", "count": 42, "requirements": [{"id": "1", "title": "หลักการและเหตุผล"}], "note": "PLACEHOLDER_PROBE_SHOULD_NOT_REMAIN"}
