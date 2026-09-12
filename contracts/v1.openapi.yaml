@@ -1,0 +1,385 @@
+openapi: 3.1.0
+info:
+  title: TOR Comply Assistant API
+  version: 1.1.0
+  description: |
+    Frozen MVP contract. No LLM on the hot path.
+    Export maps 1:1 to Red Cross filled Word layout:
+    ลำดับที่ | รายละเอียดการดำเนินงาน | รายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ |
+    เปรียบเทียบรายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ | เอกสารอ้างอิง
+servers:
+  - url: /api/v1
+    description: Local MVP (client store today; same shapes when HTTP lands)
+tags:
+  - name: projects
+  - name: requirements
+  - name: docs
+  - name: rows
+  - name: export
+paths:
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      operationId: listProjects
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projects]
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProjectSummary"
+    post:
+      tags: [projects]
+      summary: Create blank project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  default: โครงการใหม่
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+  /projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      tags: [projects]
+      summary: Get full project graph
+      operationId: getProject
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [projects]
+      summary: Rename project
+      operationId: patchProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [projects]
+      summary: Delete project
+      operationId: deleteProject
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /projects/{projectId}/requirements:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    put:
+      tags: [requirements]
+      summary: Upsert requirement by stable TOR section id
+      operationId: upsertRequirement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Requirement"
+      responses:
+        "200":
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Requirement"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /projects/{projectId}/docs:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      tags: [docs]
+      summary: Attach project-scoped document (PDF/DOCX)
+      operationId: addDoc
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                id:
+                  type: string
+                  description: Optional project-scoped docId; server generates UUID if omitted
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDoc"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /projects/{projectId}/docs/{docId}:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+      - $ref: "#/components/parameters/docId"
+    delete:
+      tags: [docs]
+      summary: Remove project doc (also drops refs pointing at it)
+      operationId: removeDoc
+      responses:
+        "204":
+          description: Removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /projects/{projectId}/rows/{requirementId}:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+      - $ref: "#/components/parameters/requirementId"
+    patch:
+      tags: [rows]
+      summary: Patch ComplyRow bidder/compare text and/or refs
+      operationId: patchRow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bidderText:
+                  type: string
+                compareText:
+                  type: string
+                refs:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/DocRef"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplyRow"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /projects/{projectId}/export/word:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      tags: [export]
+      summary: Export comply Word (Red Cross columns incl. เปรียบเทียบ)
+      operationId: exportWord
+      responses:
+        "200":
+          description: DOCX
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    docId:
+      name: docId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        description: Project-scoped document id (not a global catalog id)
+    requirementId:
+      name: requirementId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/SectionId"
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    SectionId:
+      type: string
+      description: Stable TOR section number (e.g. 3.1, 5.10.1). Not a char-offset.
+      pattern: '^[0-9]+(\.[0-9]+)*$'
+      examples: ["1", "3.1", "5.10.1"]
+    DocRef:
+      type: object
+      additionalProperties: false
+      required: [docId, page]
+      properties:
+        docId:
+          type: string
+          minLength: 1
+          description: Must exist in Project.docs (project-scoped)
+        page:
+          type: integer
+          minimum: 1
+    ProjectDoc:
+      type: object
+      additionalProperties: false
+      required: [id, name, addedAt]
+      properties:
+        id:
+          type: string
+          description: Project-scoped docId
+        name:
+          type: string
+        mimeType:
+          type: string
+          enum:
+            - application/pdf
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        addedAt:
+          type: string
+          format: date-time
+    Requirement:
+      type: object
+      additionalProperties: false
+      required: [id, title, textSnapshot]
+      properties:
+        id:
+          $ref: "#/components/schemas/SectionId"
+        title:
+          type: string
+        textSnapshot:
+          type: string
+          description: Frozen text at import/upsert time so re-import cannot break rows
+    ComplyRow:
+      type: object
+      additionalProperties: false
+      required: [requirementId, bidderText, compareText, refs]
+      properties:
+        requirementId:
+          $ref: "#/components/schemas/SectionId"
+        bidderText:
+          type: string
+          description: Maps to Word col รายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ
+        compareText:
+          type: string
+          description: Maps to Word col เปรียบเทียบรายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocRef"
+          description: Maps to Word col เอกสารอ้างอิง as "{name} หน้า {page}"
+    Project:
+      type: object
+      additionalProperties: false
+      required: [id, name, createdAt, requirements, docs, rows]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        requirements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Requirement"
+        docs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectDoc"
+        rows:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ComplyRow"
+          description: Keyed by Requirement.id (SectionId)
+    ProjectSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, createdAt, requirementCount, docCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        requirementCount:
+          type: integer
+          minimum: 0
+        docCount:
+          type: integer
+          minimum: 0
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          enum: [not_found, bad_request, conflict]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
