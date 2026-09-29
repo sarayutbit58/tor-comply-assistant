@@ -70,6 +70,7 @@ export async function readTemplate(file) {
     }
     notices.push('ใช้หัวตารางและรูปแบบจากแผ่นงานแรก; ส่งออกเป็นตารางกรองได้โดยไม่รวมเซลล์ข้อมูล');
   } else if(format==='pdf') {
+    profile.headerFill='FFFFFF';profile.headerColor='262629';profile.borderColor='777777';
     const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
     const pages=await extractPdf(file,1), first=pages[0];
     const pdf=await loadPdf(file);
@@ -85,13 +86,29 @@ export async function readTemplate(file) {
         if(groups.length>=3)profile.columns=columns(groups.map(g=>g.text),groups.map((g,i)=>((groups[i+1]?.x||.96)-g.x)*100));
         if(y>.03){
           const canvas=document.createElement('canvas');await paintPage(pdf,1,canvas,1.5);
+          const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
+          const histogram=new Map();
+          const topY=Math.max(0,Math.floor((y-.006)*canvas.height));
+          const bottomY=Math.min(canvas.height,Math.ceil((Math.max(...headerItems.map(i=>i.box[1]+i.box[3]))+.006)*canvas.height));
+          const leftX=Math.max(0,Math.floor((Math.min(...headerItems.map(i=>i.box[0]))-.008)*canvas.width));
+          const rightX=Math.min(canvas.width,Math.ceil(Math.max(...headerItems.map(i=>i.box[0]+i.box[2]))*canvas.width));
+          for(let py=topY;py<bottomY;py+=2)for(let px=leftX;px<rightX;px+=3){
+            const offset=(py*canvas.width+px)*4;
+            const hex=[pixels.data[offset],pixels.data[offset+1],pixels.data[offset+2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+            histogram.set(hex,(histogram.get(hex)||0)+1);
+          }
+          const fill=[...histogram].sort((a,b)=>b[1]-a[1])[0]?.[0];
+          if(fill){
+            profile.headerFill=fill;
+            const luminance=.299*parseInt(fill.slice(0,2),16)+.587*parseInt(fill.slice(2,4),16)+.114*parseInt(fill.slice(4,6),16);
+            profile.headerColor=luminance<140?'FFFFFF':'262629';
+          }
           const top=document.createElement('canvas');top.width=canvas.width;top.height=Math.floor(canvas.height*Math.max(0,y-.015));
           top.getContext('2d').drawImage(canvas,0,0,top.width,top.height,0,0,top.width,top.height);
           profile.banner=top.toDataURL('image/png');profile.bannerRatio=top.height/top.width;
         }
       } else notices.push('ยังอ่านหัวตาราง PDF ไม่ครบ กรุณากำหนดหัวคอลัมน์ในตัวอย่างก่อนใช้งาน');
     } finally {await pdf.destroy();}
-    profile.headerFill='FFFFFF';profile.headerColor='262629';profile.borderColor='777777';
     notices.push('PDF ใช้ขนาดหน้าและส่วนหัวจากต้นฉบับ แล้วจัดตารางใหม่; ตำแหน่งอาจต่างจากแม่แบบ');
   } else throw new Error('แม่แบบรองรับ DOCX, PDF หรือ XLSX');
   validateProfile(profile);

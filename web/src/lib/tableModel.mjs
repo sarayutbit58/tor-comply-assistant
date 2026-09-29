@@ -13,7 +13,7 @@ export const DEFAULT_PROFILE = {
 export function guessField(heading,index) {
   if (/ลำดับ|เลขข้อ|^ข้อ$/.test(heading)) return 'number';
   if (/อ้างอิง|reference/i.test(heading)) return 'references';
-  if (/เปรียบเทียบ|ผล|comply|compliance/i.test(heading)) return 'comparison';
+  if (/เปรียบเทียบ|ผล|comply|compliance|result|status|comparison/i.test(heading)) return 'comparison';
   if (/เสนอ|offer|propos/i.test(heading)) return 'proposal';
   return index===0 || /กำหนด|รายละเอียด|requirement/i.test(heading) ? 'requirement' : 'proposal';
 }
