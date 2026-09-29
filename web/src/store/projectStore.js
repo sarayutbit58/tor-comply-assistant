@@ -10,7 +10,7 @@ const emptyRow = requirementId => ({ requirementId, proposal: '', comparison: pe
 
 const safeStorage = {
   getItem(name) { try { return typeof window === 'undefined' ? null : window.localStorage.getItem(name); } catch { return null; } },
-  setItem(name, value) { try { window.localStorage.setItem(name, value); } catch { window.dispatchEvent(new Event('tor-storage-error')); } },
+  setItem(name, value) { try { window.localStorage.setItem(name, value); } catch { window.dispatchEvent(new Event('tor-storage-error')); throw new Error('พื้นที่เก็บข้อมูลเบราว์เซอร์เต็มหรือถูกปิด'); } },
   removeItem(name) { try { window.localStorage.removeItem(name); } catch { /* browser storage disabled */ } },
 };
 
