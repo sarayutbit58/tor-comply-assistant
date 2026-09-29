@@ -17,3 +17,9 @@ test('Excel export writes four columns and keeps formula-like proposal as text',
   assert.match(text, /=HYPERLINK/u);
   assert.match(text, /หน้า 4 \(PDF 5\)/u);
 });
+test('white template header fill is independent from its dark text color',()=>{
+  const bytes=buildXlsx({template:{profile:{headerFill:'FFFFFF',headerColor:'262629'}},requirements:[],rows:{},evidence:[],docs:[]});
+  const xml=new TextDecoder().decode(bytes);
+  assert.match(xml,/<fgColor rgb="FFFFFFFF"/);
+  assert.match(xml,/<color rgb="FF262629"/);
+});

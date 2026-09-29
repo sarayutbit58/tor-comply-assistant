@@ -39,10 +39,12 @@ export function passProblems(project, id) {
   const problems = [];
   if (!req?.reviewed) problems.push('ยังไม่ได้ตรวจ TOR');
   if (!row?.proposal.trim()) problems.push('ยังไม่มีรายละเอียดที่เสนอ');
-  if (!selectedItems(row).length) problems.push('ยังไม่ได้เลือกสินค้า/บริการ');
+  if (!selectedItems(row).length && row?.scope!=='bidder') problems.push('ยังไม่ได้เลือกสินค้า/บริการ');
   if (!marks.length) problems.push('ยังไม่มีหลักฐาน');
   if (marks.some(m => m.sourceMethod === 'ocr' && !m.reviewed)) problems.push('ยังไม่ได้ตรวจข้อความหลักฐาน OCR');
   const docs = marks.map(m => project.docs.find(d => d.id === m.docId)).filter(Boolean);
+  if (row?.scope==='bidder'&&!docs.some(d=>d.role==='bidder')) problems.push('ยังไม่มีหลักฐานคุณสมบัติผู้ยื่นข้อเสนอ');
+  if (marks.some(m=>!m.quote?.trim())) problems.push('หลักฐานไม่มีข้อความที่อ้าง');
   if (docs.some(d => !eligibleDocument(d))) problems.push('ประเภทไฟล์หลักฐานไม่ถูกต้อง');
   for (const itemId of selectedItems(row)) if (!docs.some(doc => doc.itemIds?.includes(itemId))) problems.push('หลักฐานยังไม่ครบทุกรายการที่ใช้ร่วมกัน');
   return [...new Set(problems)];

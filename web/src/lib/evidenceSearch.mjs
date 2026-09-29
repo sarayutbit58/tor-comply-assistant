@@ -1,5 +1,5 @@
 import { keywordTerms, normalizeText, evaluateRequirement } from './complianceRules.mjs';
-import { eligibleDocument, evidenceFor } from './projectModel.mjs';
+import { eligibleDocument, evidenceFor, rowMode } from './projectModel.mjs';
 export function unionBox(items) {
   const x = Math.min(...items.map(i => i.box[0])), y = Math.min(...items.map(i => i.box[1]));
   return [x,y,Math.min(1, Math.max(...items.map(i => i.box[0] + i.box[2]))) - x,Math.min(1, Math.max(...items.map(i => i.box[1] + i.box[3]))) - y];
@@ -42,8 +42,9 @@ export async function assessClause(project, requirementId, readFile) {
   const req = project.requirements.find(r => r.id === requirementId);
   const row = project.rows[requirementId];
   if (!req?.reviewed) throw new Error('ตรวจและยืนยันข้อความ TOR ข้อนี้ก่อนประเมิน');
-  if (!row.itemIds.length) throw new Error('เลือกสินค้า/บริการที่จะใช้ร่วมกันก่อนประเมิน');
-  const docs = project.docs.filter(d => eligibleDocument(d) && d.itemIds.some(id => row.itemIds.includes(id)));
+  if (rowMode(project,requirementId)==='auto'&&(project.unreadablePages.length||project.requirements.some(r=>!r.reviewed))) throw new Error('ตรวจ TOR ครบทุกข้อและทุกหน้าก่อนใช้ Auto');
+  if (!row.itemIds.length && row.scope!=='bidder') throw new Error('เลือกสินค้า/บริการที่จะใช้ร่วมกันก่อนประเมิน');
+  const docs = project.docs.filter(d => eligibleDocument(d) && (row.scope==='bidder'?d.role==='bidder':d.itemIds.some(id => row.itemIds.includes(id))));
   const candidates = [];
   for (const doc of docs) {
     const file = await readFile(doc.id);
@@ -52,7 +53,7 @@ export async function assessClause(project, requirementId, readFile) {
   }
   const manual = evidenceFor(project, requirementId).filter(m => {
     const doc = project.docs.find(d=>d.id===m.docId);
-    return doc && eligibleDocument(doc) && doc.itemIds.some(id=>row.itemIds.includes(id));
+    return doc && eligibleDocument(doc) && (row.scope==='bidder'?doc.role==='bidder':doc.itemIds.some(id=>row.itemIds.includes(id)));
   });
   const snippets = [...manual, ...candidates].map(m => ({...m,text:m.quote}));
   const assessment = evaluateRequirement(req.textSnapshot, snippets);

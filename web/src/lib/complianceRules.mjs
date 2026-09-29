@@ -51,13 +51,26 @@ function containsTerm(text,term) {
   return text.includes(term);
 }
 function polarity(text, term) {
-  const index = text.indexOf(term);
-  if (index < 0) return null;
-  const before = text.slice(Math.max(0, index - 32), index);
-  const after = text.slice(index + term.length, index + term.length + 30);
-  if (/ไม่รองรับ|ไม่มี|ไม่สามารถ|does not support|not support|without|no\s*$/.test(before) || /^\s*(?:is )?not supported/.test(after)) return 'negative';
-  if (/optional|license required|ต้องซื้อเพิ่ม|ขึ้นอยู่กับ|อาจ|may support/.test(text)) return 'conditional';
-  return 'positive';
+  const found=[];
+  for(let index=text.indexOf(term);index>=0;index=text.indexOf(term,index+term.length)){
+    const before=text.slice(Math.max(0,index-40,text.lastIndexOf(';',index)+1),index);
+    const after=text.slice(index+term.length,index+term.length+40).split(';')[0];
+    if(/ไม่รองรับ|ไม่มี|ไม่สามารถ|does not support|not support|without|no\s*$/.test(before)||/^\s*(?:is )?not supported/.test(after))found.push('negative');
+    else if(/optional|license required|ต้องซื้อเพิ่ม|ขึ้นอยู่กับ|อาจ|may support/.test(before+term+after))found.push('conditional');
+    else found.push('positive');
+  }
+  if(found.includes('positive')&&found.includes('negative'))return 'conflict';
+  return found.includes('conditional')?'conditional':found[0]||null;
+}
+function range(value,op) {
+  return {low:op.startsWith('<')?-Infinity:value,high:op.startsWith('>')?Infinity:value,lowOpen:op==='>',highOpen:op==='<'};
+}
+function rangeOutcome(want,got) {
+  const lower=got.low>want.low||(got.low===want.low&&(!want.lowOpen||got.lowOpen));
+  const upper=got.high<want.high||(got.high===want.high&&(!want.highOpen||got.highOpen));
+  if(lower&&upper)return 'pass';
+  if(got.high<want.low||got.low>want.high||(got.high===want.low&&(got.highOpen||want.lowOpen))||(got.low===want.high&&(got.lowOpen||want.highOpen)))return 'fail';
+  return 'pending';
 }
 export function evaluateRequirement(requirement, snippets) {
   const tor = normalizeText(requirement);
@@ -71,16 +84,27 @@ export function evaluateRequirement(requirement, snippets) {
     const expectedNegative = polarity(tor, term) === 'negative';
     const valid = expectedNegative ? negative : positive;
     const invalid = expectedNegative ? positive : negative;
-    const outcome = valid.length && invalid.length ? 'pending' : valid.length ? 'pass' : invalid.length ? 'fail' : 'pending';
+    const conflict=matching.some(s=>polarity(s.normalized,term)==='conflict');
+    const outcome = conflict||valid.length && invalid.length ? 'pending' : valid.length ? 'pass' : invalid.length ? 'fail' : 'pending';
     checks.push({ label: term, outcome, reason: valid.length && invalid.length ? 'หลักฐานขัดแย้งกัน' : outcome === 'pass' ? 'พบข้อความรองรับ' : outcome === 'fail' ? 'พบข้อความตรงข้าม' : 'ยังไม่มีข้อความยืนยันที่ชัดเจน', sourceIds: matching.map(s => s.id) });
   }
   for (const expected of quantityRules(tor)) {
     const matches = sources.flatMap(source => quantityRules(source.normalized).filter(actual => actual.unit === expected.unit && (!expected.qualifier || actual.qualifier === expected.qualifier)).map(actual => ({ ...actual, source })));
-    const compare = value => expected.values.every(want => expected.op === '>=' ? value >= want : expected.op === '<=' ? value <= want : expected.op === '>' ? value > want : expected.op === '<' ? value < want : value === want);
-    const valid = matches.filter(actual => expected.values.every(want => actual.values.some(value => expected.op === '=' ? value === want : compare(value))));
-    const invalid = matches.filter(actual => !valid.includes(actual));
-    // An exact supported speed absent from a multi-rate list is missing proof, not a claimed incompatibility.
-    const outcome = valid.length && invalid.length ? 'pending' : valid.length ? 'pass' : invalid.length && expected.op !== '=' ? 'fail' : 'pending';
+    const expectedNegative=polarity(tor,expected.label)==='negative';
+    const outcomes=matches.map(actual=>{
+      const direction=polarity(actual.source.normalized,actual.label);
+      if(direction==='conditional'||direction==='conflict')return 'pending';
+      const results=expected.values.map(want=>{
+        const values=actual.values.map(value=>rangeOutcome(range(want,expected.op),range(value,actual.op)));
+        return values.includes('pass')?'pass':values.every(v=>v==='fail')?'fail':'pending';
+      });
+      let result=results.every(v=>v==='pass')?'pass':results.includes('fail')?'fail':'pending';
+      if(result==='pass' && (direction==='negative')!==expectedNegative)return 'fail';
+      if(result==='fail'&&expected.unit==='mbps'&&expected.op==='=')result='pending';
+      return result;
+    });
+    const valid=outcomes.filter(o=>o==='pass'),invalid=outcomes.filter(o=>o==='fail');
+    const outcome=valid.length&&invalid.length?'pending':valid.length?'pass':invalid.length?'fail':'pending';
     checks.push({ label: [expected.qualifier, expected.op, expected.label].filter(Boolean).join(' '), outcome, reason: valid.length && invalid.length ? 'ค่าจากหลักฐานขัดแย้งกัน' : outcome === 'pass' ? 'ค่าและหน่วยตรงตามกฎ' : outcome === 'fail' ? 'ค่าที่ระบุไม่ผ่านเกณฑ์' : 'ยังไม่พบค่าที่ TOR ต้องการ', sourceIds: matches.map(m => m.source.id) });
   }
   if (!checks.length) checks.push({ label: 'ข้อกำหนด', outcome: 'pending', reason: 'ยังแยกเงื่อนไขนี้เป็นกฎไม่ได้', sourceIds: [] });

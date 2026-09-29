@@ -108,7 +108,7 @@ export const useProjectStore = create()(persist((set, get) => {
         for (const mark of candidates) evidence = mergeMark({ ...p, evidence }, { ...mark, id: newId(), requirementIds: [reqId] });
         const row = { ...p.rows[reqId], assessment, proposal: p.rows[reqId].proposal || proposal, comparison: STATUS.pending };
         const result = { ...p, evidence, rows: { ...p.rows, [reqId]: row } };
-        if ((row.mode || p.mode) === 'auto' && p.requirements.find(r => r.id === reqId)?.reviewed) {
+        if ((row.mode || p.mode) === 'auto' && !p.unreadablePages.length && p.requirements.every(r=>r.reviewed)) {
           if (assessment.status === 'fail') row.comparison = STATUS.fail;
           if (assessment.status === 'pass' && !passProblems(result, reqId).length) row.comparison = STATUS.pass;
         }

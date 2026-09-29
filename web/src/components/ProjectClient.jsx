@@ -96,7 +96,7 @@ export function ProjectClient({projectId}){
       let count=0;
       for(const req of snapshot.requirements){
         const current=useProjectStore.getState().projects.find(p=>p.id===projectId);
-        if(rowMode(current,req.id)!=='auto'||!current.rows[req.id].itemIds.length)continue;
+        if(rowMode(current,req.id)!=='auto'||(!current.rows[req.id].itemIds.length&&current.rows[req.id].scope!=='bidder'))continue;
         const result=await assessClause(current,req.id,readIndexed);actions.applyAssessment(projectId,req.id,result.assessment,result.candidates,result.proposal);count++;
         await new Promise(resolve=>setTimeout(resolve,0));
       }

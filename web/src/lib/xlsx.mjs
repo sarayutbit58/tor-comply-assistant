@@ -88,7 +88,8 @@ const finalStyles = styles.replace('</styleSheet>', '<cellStyles count="1"><cell
 
 export function buildXlsx(project) {
   const profile=profileFor(project);
-  const customizedStyles=finalStyles.replaceAll('FFFF0038','FF'+profile.headerFill).replaceAll('FFFFFFFF','FF'+profile.headerColor).replaceAll('FFD9D9DD','FF'+profile.borderColor).replaceAll('Tahoma',xml(profile.font)).replace('sz val="10"',`sz val="${profile.fontSize}"`);
+  const palette={FFFF0038:'FF'+profile.headerFill,FFFFFFFF:'FF'+profile.headerColor,FFD9D9DD:'FF'+profile.borderColor};
+  const customizedStyles=finalStyles.replace(/FFFF0038|FFFFFFFF|FFD9D9DD/g,value=>palette[value]).replaceAll('Tahoma',xml(profile.font)).replace('sz val="10"',`sz val="${profile.fontSize}"`);
   return zip([
     ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],

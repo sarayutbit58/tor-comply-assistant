@@ -10,8 +10,8 @@ async function nativeWord(project) {
   const rows=[...table.children].filter(n=>n.localName==='tr');
   const header=rows[project.template.native.headerRow];
   const profile=profileFor(project),values=tableRows(project);
-  const base=rows[project.template.native.headerRow+1]||header;
   const headerCells=[...header.children].filter(n=>n.localName==='tc');
+  const base=rows.slice(project.template.native.headerRow+1).find(row=>[...row.children].filter(n=>n.localName==='tc').length===headerCells.length)||header;
   if(headerCells.length!==profile.columns.length)throw new Error('จำนวนคอลัมน์ไม่ตรงแม่แบบ DOCX');
   const make=(name)=>doc.createElementNS(WORD_NS,'w:'+name);
   function writeCell(cell,text) {
@@ -30,7 +30,7 @@ async function nativeWord(project) {
   let trPr=[...header.children].find(n=>n.localName==='trPr');
   if(!trPr){trPr=make('trPr');header.prepend(trPr);}if(!nodes(trPr,'tblHeader').length)trPr.append(make('tblHeader'));
   const dataTemplate=base.cloneNode(true);
-  for(const row of rows)if(row!==header)row.remove();
+  for(const row of rows.slice(project.template.native.headerRow+1))row.remove();
   for(const row of values){
     const tr=dataTemplate.cloneNode(true),cells=[...tr.children].filter(n=>n.localName==='tc');
     // Use the header cell structure when the original first body row is a merged section heading.

@@ -37,3 +37,13 @@ test('bare standard versions, bandwidth ratios and video frame rates cannot disa
   assert.notEqual(check('Guarantee Bandwidth 1:1','Guarantee Bandwidth 1:10').status,'pass');
   assert.equal(check('ไม่น้อยกว่า 30 fps','60 fps').status,'pass');
 });
+test('numeric-only requirements still respect negation, optional features and source bounds',()=>{
+  assert.equal(check('รองรับ 10 Gbps','ไม่รองรับ 10 Gbps').status,'fail');
+  assert.equal(check('รองรับ 10 Gbps','10 Gbps optional license required').status,'pending');
+  assert.equal(check('response time ไม่เกิน 10 ms','response time มากกว่า 10 ms').status,'fail');
+  assert.equal(check('อย่างน้อย 24 พอร์ต','ไม่เกิน 48 พอร์ต').status,'pending');
+  assert.equal(check('อย่างน้อย 24 พอร์ต','อย่างน้อย 48 พอร์ต').status,'pass');
+});
+test('conflicting occurrences inside one excerpt do not pass',()=>{
+  assert.equal(check('Support IPv6','IPv6 supported; IPv6 is not supported').status,'pending');
+});
