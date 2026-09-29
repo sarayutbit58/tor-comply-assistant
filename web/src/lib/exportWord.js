@@ -1,44 +1,68 @@
-export async function exportComplyWord(project) {
-  const { BorderStyle, Document, Packer, PageOrientation, Paragraph, Table, TableCell, TableRow, TextRun, WidthType } = await import('docx');
-  const widths = [5000, 4300, 2800, 3200];
-  const border = { style: BorderStyle.SINGLE, size: 4, color: 'D9D9DD' };
-  const borders = { top: border, bottom: border, left: border, right: border };
-
-  function cell(text, width, bold = false) {
-    return new TableCell({
-      width: { size: width, type: WidthType.DXA },
-      borders,
-      children: [new Paragraph({ children: [new TextRun({ text: text || ' ', bold, font: 'TH Sarabun New', size: 28 })] })],
-    });
+import {profileFor,tableRows} from './tableModel.mjs';
+import {getFile} from './localFiles';
+import {readOffice,nodes,WORD_NS} from './officeXml';
+async function nativeWord(project) {
+  const entry=await getFile(project.template.id);
+  if(!entry)throw new Error('ไม่พบแม่แบบต้นฉบับ');
+  const {archive,xml}=await readOffice(entry.blob),doc=xml('word/document.xml');
+  const table=nodes(doc,'tbl')[project.template.native.tableIndex];
+  if(!table)throw new Error('ไม่พบตารางแม่แบบที่เลือก');
+  const rows=[...table.children].filter(n=>n.localName==='tr');
+  const header=rows[project.template.native.headerRow];
+  const profile=profileFor(project),values=tableRows(project);
+  const base=rows[project.template.native.headerRow+1]||header;
+  const headerCells=[...header.children].filter(n=>n.localName==='tc');
+  if(headerCells.length!==profile.columns.length)throw new Error('จำนวนคอลัมน์ไม่ตรงแม่แบบ DOCX');
+  const make=(name)=>doc.createElementNS(WORD_NS,'w:'+name);
+  function writeCell(cell,text) {
+    const props=[...cell.children].find(n=>n.localName==='tcPr')?.cloneNode(true);
+    const paragraphProps=nodes(cell,'pPr')[0]?.cloneNode(true);
+    const runProps=nodes(cell,'rPr')[0]?.cloneNode(true);
+    cell.replaceChildren();
+    if(props){for(const merge of nodes(props,'vMerge'))merge.remove();cell.append(props);}
+    for(const line of String(text||' ').split('\n')){
+      const p=make('p');if(paragraphProps)p.append(paragraphProps.cloneNode(true));
+      const r=make('r');if(runProps)r.append(runProps.cloneNode(true));
+      const t=make('t');t.setAttribute('xml:space','preserve');t.textContent=line||' ';r.append(t);p.append(r);cell.append(p);
+    }
   }
-
-  const header = new TableRow({ children: [
-    cell('รายละเอียดการดำเนินงาน', widths[0], true),
-    cell('รายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ', widths[1], true),
-    cell('เปรียบเทียบรายละเอียดการดำเนินงานที่ผู้เสนอราคาเสนอ', widths[2], true),
-    cell('เอกสารอ้างอิง ไฟล์ใด หน้าใด', widths[3], true),
-  ] });
-  const body = project.requirements.map(requirement => {
-    const response = project.rows[requirement.id] || {};
-    const references = project.evidence.filter(item => item.requirementId === requirement.id).map(item => {
-      const document = project.docs.find(doc => doc.id === item.docId);
-      const page = item.printedPage ? `หน้า ${item.printedPage} (PDF ${item.pdfPage})` : `หน้า PDF ${item.pdfPage}`;
-      return `${document?.name || item.docId} ${page}`;
-    });
-    return new TableRow({ children: [
-      cell(`ข้อ ${requirement.id} ${requirement.textSnapshot}`, widths[0]),
-      cell(response.proposal || '', widths[1]),
-      cell(response.comparison || 'รอตรวจสอบ', widths[2]),
-      cell(references.join('\n'), widths[3]),
-    ] });
-  });
-  const document = new Document({ sections: [{
-    properties: { page: { size: { width: 16838, height: 11906, orientation: PageOrientation.LANDSCAPE }, margin: { top: 720, right: 720, bottom: 720, left: 720 } } },
-    children: [
-      new Paragraph({ children: [new TextRun({ text: `ตาราง Comply TOR ${project.name}`, bold: true, font: 'TH Sarabun New', size: 32 })] }),
-      new Paragraph({ children: [] }),
-      new Table({ width: { size: widths.reduce((sum, value) => sum + value, 0), type: WidthType.DXA }, rows: [header, ...body] }),
-    ],
-  }] });
+  headerCells.forEach((cell,i)=>writeCell(cell,profile.columns[i].heading));
+  let trPr=[...header.children].find(n=>n.localName==='trPr');
+  if(!trPr){trPr=make('trPr');header.prepend(trPr);}if(!nodes(trPr,'tblHeader').length)trPr.append(make('tblHeader'));
+  const dataTemplate=base.cloneNode(true);
+  for(const row of rows)if(row!==header)row.remove();
+  for(const row of values){
+    const tr=dataTemplate.cloneNode(true),cells=[...tr.children].filter(n=>n.localName==='tc');
+    // Use the header cell structure when the original first body row is a merged section heading.
+    if(cells.length!==profile.columns.length){tr.replaceChildren(...headerCells.map(c=>c.cloneNode(true)));}
+    [...tr.children].filter(n=>n.localName==='tc').forEach((cell,i)=>writeCell(cell,row[i]));
+    for(const marker of nodes(tr,'tblHeader'))marker.remove();
+    for(const height of nodes(tr,'trHeight'))height.remove();
+    table.append(tr);
+  }
+  const {zipSync,strToU8}=await import('fflate');
+  archive['word/document.xml']=strToU8(new XMLSerializer().serializeToString(doc));
+  return new Blob([zipSync(archive)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+export async function exportComplyWord(project) {
+  if(project.template?.format==='docx')return nativeWord(project);
+  const {BorderStyle,Document,Packer,Paragraph,Table,TableCell,TableRow,TextRun,WidthType,ImageRun,Footer,PageNumber}=await import('docx');
+  const p=profileFor(project),total=p.columns.reduce((n,c)=>n+c.width,0),usable=(p.pageWidth-2*(p.margin||30))*20;
+  const widths=p.columns.map(c=>Math.round(usable*c.width/total));
+  const border={style:BorderStyle.SINGLE,size:4,color:p.borderColor};
+  function cell(text,width,header=false){
+    return new TableCell({width:{size:width,type:WidthType.DXA},borders:{top:border,bottom:border,left:border,right:border},shading:header?{fill:p.headerFill}:undefined,children:String(text||' ').split('\n').map(line=>new Paragraph({children:[new TextRun({text:line||' ',bold:header,font:p.font,size:p.fontSize*2,color:header?p.headerColor:'262629'})]}))});
+  }
+  const header=new TableRow({tableHeader:true,children:p.columns.map((c,i)=>cell(c.heading,widths[i],true))});
+  const rows=tableRows(project).map(row=>new TableRow({children:row.map((text,i)=>cell(text,widths[i]))}));
+  const children=[];
+  if(p.banner){
+    const bytes=Uint8Array.from(atob(p.banner.split(',')[1]),c=>c.charCodeAt(0));
+    children.push(new Paragraph({children:[new ImageRun({type:'png',data:bytes,transformation:{width:600,height:600*p.bannerRatio}})]}));
+  }
+  children.push(new Paragraph({children:[new TextRun({text:(p.heading||'ตาราง Comply TOR')+' '+project.name,font:p.font,size:28,bold:true})]}));
+  if(p.headerText)children.push(new Paragraph({text:p.headerText}));
+  children.push(new Table({width:{size:usable,type:WidthType.DXA},rows:[header,...rows]}));
+  const document=new Document({sections:[{properties:{page:{size:{width:Math.round(p.pageWidth*20),height:Math.round(p.pageHeight*20)},margin:{top:600,right:600,bottom:600,left:600}}},children,footers:{default:new Footer({children:[new Paragraph({children:[new TextRun({children:['หน้า ',PageNumber.CURRENT,' / ',PageNumber.TOTAL_PAGES]})]})]})}}]});
   return Packer.toBlob(document);
 }

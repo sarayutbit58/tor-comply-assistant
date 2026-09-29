@@ -27,7 +27,15 @@ export async function extractPdf(blob) {
   try {
     const pages = [];
     for (let number = 1; number <= pdf.numPages; number += 1) {
-      pages.push({ page: number, text: await pageText(pdf, number) });
+      const page = await pdf.getPage(number);
+      const viewport = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const items = content.items.filter(item => 'str' in item && item.str.trim()).map(item => {
+        const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+        const h = Math.max(1, item.height || Math.hypot(item.transform[2], item.transform[3]));
+        return { text: item.str, box: [Math.max(0, x / viewport.width), Math.max(0, (y - h) / viewport.height), Math.max(.001, Math.min(1 - Math.max(0, x / viewport.width), Math.abs(item.width) / viewport.width)), Math.min(1, h / viewport.height)], end: Boolean(item.hasEOL) };
+      });
+      pages.push({ page: number, text: content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('').trim(), items });
     }
     return pages;
   } finally {

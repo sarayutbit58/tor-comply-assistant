@@ -1,3 +1,4 @@
+import { profileFor, tableRows } from './tableModel.mjs';
 const encoder = new TextEncoder();
 const columns = [
   'รายละเอียดการดำเนินงาน',
@@ -74,30 +75,26 @@ function zip(entries) {
 }
 
 function sheet(project) {
-  const rows = [columns];
-  for (const requirement of project.requirements) {
-    const response = project.rows[requirement.id] || {};
-    const refs = project.evidence.filter(item => item.requirementId === requirement.id).map(item => {
-      const document = project.docs.find(doc => doc.id === item.docId);
-      const page = item.printedPage ? `หน้า ${item.printedPage} (PDF ${item.pdfPage})` : `หน้า PDF ${item.pdfPage}`;
-      return `${document?.name || item.docId} ${page}`;
-    });
-    rows.push([`ข้อ ${requirement.id} ${requirement.textSnapshot}`, response.proposal || '', response.comparison || 'รอตรวจสอบ', refs.join('\n')]);
-  }
-  const cells = rows.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => `<c r="${'ABCD'[columnIndex]}${rowIndex + 1}" s="${rowIndex === 0 ? 1 : 2}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`).join('')}</row>`).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="1" width="48" customWidth="1"/><col min="2" max="2" width="48" customWidth="1"/><col min="3" max="3" width="33" customWidth="1"/><col min="4" max="4" width="43" customWidth="1"/></cols><sheetData>${cells}</sheetData><autoFilter ref="A1:D${rows.length}"/></worksheet>`;
+  const profile=profileFor(project);
+  const rows=[profile.columns.map(c=>c.heading),...tableRows(project)];
+  const total=profile.columns.reduce((sum,c)=>sum+c.width,0);
+  const cells=rows.map((row,r)=>`<row r="${r+1}">${row.map((value,c)=>`<c r="${String.fromCharCode(65+c)}${r+1}" s="${r===0?1:2}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`).join('')}</row>`).join('');
+  const cols=profile.columns.map((c,i)=>`<col min="${i+1}" max="${i+1}" width="${Math.max(12,180*c.width/total)}" customWidth="1"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${cells}</sheetData><autoFilter ref="A1:${String.fromCharCode(64+profile.columns.length)}${rows.length}"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
 }
 
 const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="10"/><name val="Tahoma"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Tahoma"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF0038"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFD9D9DD"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs></styleSheet>`;
 const finalStyles = styles.replace('</styleSheet>', '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
 
 export function buildXlsx(project) {
+  const profile=profileFor(project);
+  const customizedStyles=finalStyles.replaceAll('FFFF0038','FF'+profile.headerFill).replaceAll('FFFFFFFF','FF'+profile.headerColor).replaceAll('FFD9D9DD','FF'+profile.borderColor).replaceAll('Tahoma',xml(profile.font)).replace('sz val="10"',`sz val="${profile.fontSize}"`);
   return zip([
     ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
     ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
     ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="ตาราง Comply TOR" sheetId="1" r:id="rId1"/></sheets></workbook>'],
     ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
     ['xl/worksheets/sheet1.xml', sheet(project)],
-    ['xl/styles.xml', finalStyles],
+    ['xl/styles.xml', customizedStyles],
   ]);
 }

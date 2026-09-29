@@ -13,13 +13,14 @@ function database() {
   return opening;
 }
 
-export async function putFile(id, blob, pageTexts = []) {
+export async function putFile(id, blob, pageTexts = [], pages = []) {
   const db = await database();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE, 'readwrite');
-    transaction.objectStore(STORE).put({ id, blob, pageTexts });
+    transaction.objectStore(STORE).put({ id, blob, pageTexts, pages });
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error || new Error('บันทึกไฟล์ไม่สำเร็จ'));
+    transaction.onabort = () => reject(transaction.error || new Error('การบันทึกไฟล์ถูกยกเลิก'));
   });
 }
 

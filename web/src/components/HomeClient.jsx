@@ -6,6 +6,7 @@ import { AppShell } from './AppShell';
 import { useProjectStore } from '@/store/projectStore';
 import { parsePages } from '@/lib/torModel.mjs';
 import { deleteFile, putFile } from '@/lib/localFiles';
+import { projectFileIds } from '@/lib/projectModel.mjs';
 
 export function HomeClient() {
   const router = useRouter();
@@ -31,13 +32,15 @@ export function HomeClient() {
         if (file.size > 40 * 1024 * 1024) throw new Error('ไฟล์ TOR เกิน 40 MB');
         if (/\.pdf$/iu.test(file.name)) {
           const { extractPdf } = await import('@/lib/pdfBrowser');
-          ({ requirements, unreadablePages } = parsePages(await extractPdf(file)));
+          const pages = await extractPdf(file);
+          ({ requirements, unreadablePages } = parsePages(pages));
+          torDocId = crypto.randomUUID();
+          await putFile(torDocId, file, pages.map(p=>p.text), pages);
         } else if (/\.docx$/iu.test(file.name)) {
           const { extractDocx } = await import('@/lib/docxBrowser');
           ({ requirements, unreadablePages } = await extractDocx(file));
         } else throw new Error('รองรับ TOR แบบ PDF หรือ DOCX เท่านั้น');
-        torDocId = crypto.randomUUID();
-        await putFile(torDocId, file);
+        if (!torDocId) { torDocId = crypto.randomUUID(); await putFile(torDocId, file); }
       }
       const id = createProject({ name, torDocId, torFilename: file?.name || '', requirements, unreadablePages });
       router.push(`/project/${id}`);
@@ -51,11 +54,25 @@ export function HomeClient() {
   async function remove(project) {
     if (!window.confirm(`ลบโครงการ ${project.name} และไฟล์ที่เก็บในเบราว์เซอร์นี้?`)) return;
     try {
-      await Promise.all([project.torDocId, ...project.docs.map(doc => doc.id)].filter(Boolean).map(deleteFile));
+      await Promise.all(projectFileIds(project).map(deleteFile));
       deleteProject(project.id);
     } catch (cause) {
       setError(cause.message || 'ลบโครงการไม่สำเร็จ');
     }
+  }
+
+  async function restore(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy(true); setError('');
+    let result;
+    try {
+      const { importProjectArchive } = await import('@/lib/projectArchive');
+      result = await importProjectArchive(file);
+      const id = useProjectStore.getState().importProject(result.project);
+      router.push('/project/' + id);
+    } catch (cause) { if (result) await result.rollback(); setError(cause.message || 'นำเข้าโครงการไม่สำเร็จ'); }
+    finally { setBusy(false); event.target.value = ''; }
   }
 
   return <AppShell>
@@ -63,7 +80,7 @@ export function HomeClient() {
       <div>
         <p className="eyebrow">Presales workspace / TOR Comply</p>
         <h1 className="mt-3 max-w-2xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">จากข้อกำหนด<br/><span className="text-[#ff0038]">สู่หลักฐานที่ตรวจสอบได้</span></h1>
-        <p className="mt-5 max-w-xl text-sm leading-7 text-zinc-600">อ่าน TOR เป็นเช็กลิสต์ ผูกสินค้าและเอกสาร ทำเครื่องหมายบน PDF แล้วส่งออกตาราง Comply โดยไม่เรียก AI API แบบเสียเงิน</p>
+        <p className="mt-5 max-w-xl text-sm leading-7 text-zinc-600">พื้นที่ทำงานบนโน้ตบุ๊กสำหรับเทียบ TOR กับหลักฐาน คัดเลือกสินค้าและบริการ ประเมินตามกฎ แล้วส่งออกเอกสารที่ตรวจสอบย้อนกลับได้</p>
         <div className="mt-8 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="flow-chip">TOR</span><b className="text-[#ff0038]">→</b><span className="flow-chip">สินค้า</span><b className="text-[#ff0038]">→</b><span className="flow-chip">หลักฐาน</span><b className="text-[#ff0038]">→</b><span className="flow-chip">ตาราง</span></div>
       </div>
       <form onSubmit={create} className="rounded-md border border-zinc-200 bg-white p-6 shadow-sm sm:p-8">
@@ -77,7 +94,7 @@ export function HomeClient() {
       </form>
     </section>
     <section className="border-t border-zinc-200 pt-7">
-      <h2 className="text-base font-bold">โครงการล่าสุด</h2>
+      <div className="flex items-center justify-between"><h2 className="text-base font-bold">โครงการในเครื่องนี้</h2><label className="outline-button cursor-pointer">นำเข้าไฟล์โครงการ<input className="hidden" type="file" accept=".torproj,.zip" onChange={restore} disabled={busy}/></label></div>
       {!mounted ? <p className="mt-3 text-sm text-zinc-500">กำลังโหลดโครงการ…</p> : projects.length === 0 ? <p className="mt-3 text-sm text-zinc-500">ยังไม่มีโครงการ</p> :
         <ul className="mt-4 grid gap-2">{projects.map(project => <li key={project.id} className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white p-4">
           <button className="min-w-0 flex-1 text-left" onClick={() => router.push(`/project/${project.id}`)}><strong className="block truncate text-sm">{project.name}</strong><span className="mt-1 block text-xs text-zinc-500">{project.requirements.length} ข้อ TOR · {project.docs.length} เอกสาร</span></button>
