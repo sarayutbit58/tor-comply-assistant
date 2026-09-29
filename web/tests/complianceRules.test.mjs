@@ -47,3 +47,12 @@ test('numeric-only requirements still respect negation, optional features and so
 test('conflicting occurrences inside one excerpt do not pass',()=>{
   assert.equal(check('Support IPv6','IPv6 supported; IPv6 is not supported').status,'pending');
 });
+test('bit and byte units stay distinct and numeric values cannot cross metric dimensions',()=>{
+  assert.equal(check('Storage speed at least 100 MBps','Storage speed 100 Mbps').status,'fail');
+  assert.equal(check('RAM ไม่น้อยกว่า 16 GB','RAM 16 Gb').status,'fail');
+  assert.notEqual(check('หน่วยความจำไม่น้อยกว่า 32 GB','หน่วยความจำ DDR4; storage 512 GB').status,'pass');
+});
+test('postfix negative capability values fail',()=>{
+  assert.equal(check('รองรับ IPv6','IPv6 unsupported').status,'fail');
+  assert.equal(check('รองรับ IPv6','IPv6 No').status,'fail');
+});

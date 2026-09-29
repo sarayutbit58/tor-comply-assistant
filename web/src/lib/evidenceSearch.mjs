@@ -21,7 +21,7 @@ export function pageCandidates(requirement, document, pages) {
     }
     if (line.length) lines.push(line);
     for (let i = 0; i < lines.length; i++) {
-      const items = lines.slice(i, i+2).flat();
+      const items = lines[i];
       const text = items.map(it => it.text).join(' ');
       const normalized = normalizeText(text);
       const score = terms.filter(t => normalized.includes(t)).length + (evaluateRequirement(requirement, [{id:'candidate',text}]).status === 'pass' ? 10 : 0);

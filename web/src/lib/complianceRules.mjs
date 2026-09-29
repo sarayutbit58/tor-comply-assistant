@@ -10,6 +10,8 @@ const aliases = [
   [/วงจร|\bcircuits?\b/gi, 'circuit'], [/ช่องสัญญาณ|\bchannels?\b/gi, 'channel'],
   [/ความพร้อมใช้งาน|availability/gi, 'availability'],
   [/ระยะเวลาตอบสนอง|response time/gi, 'response_time'],
+  [/หน่วยความจำ|\bmemory\b|\bram\b/gi, 'ram'],
+  [/พื้นที่จัดเก็บ|ความจุจัดเก็บ|\bstorage\b|disk capacity/gi, 'storage'],
   [/ภายในประเทศ|domestic|\bnix\b/gi, 'nix'],
   [/ระหว่างประเทศ|international|\biig\b/gi, 'iig'],
 ];
@@ -17,12 +19,15 @@ const stop = new Set(('ต้อง มี และ หรือ สามา�
 const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
 export function normalizeText(value) {
   let text = String(value || '').normalize('NFKC').replace(/[๐-๙]/gu, d => String(digits.indexOf(d)));
+  text=text.replace(/([kKmMgGtT]?)B(?:ps|\/s)\b/g,(_,prefix)=>prefix.toLowerCase()+'byteps');
+  text=text.replace(/([kKmMgGtT])b\b/g,(_,prefix)=>prefix.toLowerCase()+'bit');
   text = text.replace(/(\d),(?=\d{3}(?:\D|$))/g, '$1').replace(/(\d)\s*[gG](?=\s|$|\/)/g, '$1 Gbps');
   for (const [pattern, term] of aliases) text = text.replace(pattern, ' ' + term + ' ');
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }
-const measurement = /(\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)*)\s*(tbps|gbps|mbps|kbps|bps|tb|gb|mb|ghz|mhz|fps|ms|mp|watt|w|%|port|core|year|month|hour|day|circuit|channel|เส้นทาง|ชุด|เครื่อง|ตัว|แห่ง|ip)(?![a-z])/g;
-const rate = { tbps: 1e6, gbps: 1e3, mbps: 1, kbps: .001, bps: .000001 };
+const measurement = /(\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)*)\s*(tbyteps|gbyteps|mbyteps|kbyteps|byteps|tbps|gbps|mbps|kbps|bps|tbit|gbit|mbit|kbit|tib|gib|mib|tb|gb|mb|kb|ghz|mhz|fps|ms|mp|watt|w|%|port|core|year|month|hour|day|circuit|channel|เส้นทาง|ชุด|เครื่อง|ตัว|แห่ง|ip)(?![a-z])/g;
+const rate = { tbps: 1e6, gbps: 1e3, mbps: 1, kbps: .001, bps: .000001,tbyteps:8e6,gbyteps:8e3,mbyteps:8,kbyteps:.008,byteps:.000008 };
+const capacity={tb:1e12,gb:1e9,mb:1e6,kb:1e3,tbit:1e12/8,gbit:1e9/8,mbit:1e6/8,kbit:1e3/8,tib:1024**4,gib:1024**3,mib:1024**2};
 const qualifiers = ['iig', 'nix', 'upload', 'download', 'ram', 'cpu', 'storage', 'response_time', 'availability'];
 function quantityRules(text) {
   return [...text.matchAll(measurement)].map(match => {
@@ -36,8 +41,8 @@ function quantityRules(text) {
     else if (/ไม่เกิน|อย่างมาก|at most|maximum|<=|≤/.test(context) || /or less/.test(suffix)) op = '<=';
     else if (/มากกว่า|greater than|>/.test(context)) op = '>';
     else if (/น้อยกว่า|less than|</.test(context)) op = '<';
-    const factor = rate[match[2]] || 1;
-    return { label: match[0], qualifier, op, values: match[1].split('/').map(v => Number(v.trim()) * factor), unit: rate[match[2]] ? 'mbps' : match[2], start: match.index, end: match.index + match[0].length };
+    const factor = rate[match[2]] || capacity[match[2]] || 1;
+    return { label: match[0], qualifier, op, values: match[1].split('/').map(v => Number(v.trim()) * factor), unit: rate[match[2]] ? 'mbps' : capacity[match[2]]?'bytes':match[2], start: match.index, end: match.index + match[0].length };
   });
 }
 export function keywordTerms(value) {
@@ -55,7 +60,7 @@ function polarity(text, term) {
   for(let index=text.indexOf(term);index>=0;index=text.indexOf(term,index+term.length)){
     const before=text.slice(Math.max(0,index-40,text.lastIndexOf(';',index)+1),index);
     const after=text.slice(index+term.length,index+term.length+40).split(';')[0];
-    if(/ไม่รองรับ|ไม่มี|ไม่สามารถ|does not support|not support|without|no\s*$/.test(before)||/^\s*(?:is )?not supported/.test(after))found.push('negative');
+    if(/ไม่รองรับ|ไม่มี|ไม่สามารถ|does not support|not support|without|no\s*$/.test(before)||/^\s*[:=-]?\s*(?:(?:is|support)\s*:?\s*)?(?:not supported|unsupported|no\b)/.test(after))found.push('negative');
     else if(/optional|license required|ต้องซื้อเพิ่ม|ขึ้นอยู่กับ|อาจ|may support/.test(before+term+after))found.push('conditional');
     else found.push('positive');
   }
@@ -89,7 +94,7 @@ export function evaluateRequirement(requirement, snippets) {
     checks.push({ label: term, outcome, reason: valid.length && invalid.length ? 'หลักฐานขัดแย้งกัน' : outcome === 'pass' ? 'พบข้อความรองรับ' : outcome === 'fail' ? 'พบข้อความตรงข้าม' : 'ยังไม่มีข้อความยืนยันที่ชัดเจน', sourceIds: matching.map(s => s.id) });
   }
   for (const expected of quantityRules(tor)) {
-    const matches = sources.flatMap(source => quantityRules(source.normalized).filter(actual => actual.unit === expected.unit && (!expected.qualifier || actual.qualifier === expected.qualifier)).map(actual => ({ ...actual, source })));
+    const matches = sources.flatMap(source => quantityRules(source.normalized).filter(actual => actual.unit === expected.unit && actual.qualifier === expected.qualifier).map(actual => ({ ...actual, source })));
     const expectedNegative=polarity(tor,expected.label)==='negative';
     const outcomes=matches.map(actual=>{
       const direction=polarity(actual.source.normalized,actual.label);
