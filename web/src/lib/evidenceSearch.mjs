@@ -35,7 +35,9 @@ export function rankItems(project, requirement) {
   return project.products.map(item => {
     const docs = project.docs.filter(d => eligibleDocument(d) && d.itemIds.includes(item.id));
     const text = normalizeText([item.name,item.brand,item.model,...docs.map(d=>d.searchText)].join(' '));
-    return { ...item, score: terms.filter(t => text.includes(t)).length, documentCount: docs.length };
+    const hint=evaluateRequirement(requirement,docs.map(d=>({id:d.id,text:d.searchText||''})));
+    const matchedChecks=hint.checks.filter(c=>c.outcome==='pass').length;
+    return { ...item, score: matchedChecks/hint.checks.length*100+terms.filter(t => text.includes(t)).length, matchedChecks,totalChecks:hint.checks.length,documentCount: docs.length };
   }).sort((a,b) => b.score-a.score);
 }
 export async function assessClause(project, requirementId, readFile) {
