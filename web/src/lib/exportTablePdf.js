@@ -34,8 +34,9 @@ export async function exportTablePdf(project) {
   const widths=profile.columns.map(c=>usable*c.width/total);
   const headings=profile.columns.map((c,i)=>wrap(c.heading,widths[i]-10));
   let pdfPage,y,pageNumber=0;
-  let banner;
+  let banner,logo;
   if(profile.banner)banner=await pdf.embedPng(profile.banner);
+  if(profile.logo)logo=await pdf.embedPng(profile.logo);
   function paintCells(cellLines,count,offset,header=false){
     const height=count*leading+12;let x=margin;
     for(let c=0;c<widths.length;c++){
@@ -46,6 +47,7 @@ export async function exportTablePdf(project) {
   }
   function newPage(){
     pdfPage=pdf.addPage([profile.pageWidth,profile.pageHeight]);pageNumber++;y=profile.pageHeight-margin;
+    if(logo){const w=Math.min(100,usable*.2),h=w*profile.logoRatio;pdfPage.drawImage(logo,{x:margin,y:y-h,width:w,height:h});y-=h+8;}
     if(banner){const h=Math.min(profile.pageHeight*.22,usable*profile.bannerRatio);pdfPage.drawImage(banner,{x:margin,y:y-h,width:usable,height:h});y-=h+8;}
     for(const line of wrap((profile.heading||'ตาราง Comply TOR')+' · '+project.name,usable)){draw(line,margin,y-size);y-=leading;}
     if(profile.headerText)for(const line of wrap(profile.headerText,usable).slice(0,5)){draw(line,margin,y-size);y-=leading;}
@@ -65,6 +67,6 @@ export async function exportTablePdf(project) {
     }
   }
   const pages=pdf.getPages();
-  pages.forEach((page,index)=>{pdfPage=page;draw('หน้า '+(index+1)+' / '+pages.length,margin,16);});
+  pages.forEach((page,index)=>{pdfPage=page;draw((profile.footerText?profile.footerText+' · ':'')+'หน้า '+(index+1)+' / '+pages.length,margin,16);});
   return new Blob([await pdf.save()],{type:'application/pdf'});
 }

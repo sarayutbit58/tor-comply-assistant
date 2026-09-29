@@ -22,11 +22,11 @@ export async function pageText(pdf, number) {
   return content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('').trim();
 }
 
-export async function extractPdf(blob) {
+export async function extractPdf(blob, maxPages = Infinity) {
   const pdf = await loadPdf(blob);
   try {
     const pages = [];
-    for (let number = 1; number <= pdf.numPages; number += 1) {
+    for (let number = 1; number <= Math.min(pdf.numPages,maxPages); number += 1) {
       const page = await pdf.getPage(number);
       const viewport = page.getViewport({ scale: 1 });
       const content = await page.getTextContent();

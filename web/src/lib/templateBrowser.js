@@ -7,7 +7,7 @@ export async function readTemplate(file) {
   const profile=structuredClone(DEFAULT_PROFILE);
   let native={}, notices=[];
   if(format==='docx') {
-    const {xml}=await readOffice(file), doc=xml('word/document.xml');
+    const {xml,archive}=await readOffice(file), doc=xml('word/document.xml');
     if(!doc) throw new Error('ไม่พบเนื้อหา DOCX');
     const tables=nodes(doc,'tbl');
     const tableIndex=tables.findIndex(t=>nodes(t,'tr').some(row=>nodes(row,'tc').length>=2));
@@ -28,7 +28,24 @@ export async function readTemplate(file) {
     const pg=nodes(doc,'pgSz')[0];
     if(pg){profile.pageWidth=Number(attr(pg,'w'))/20;profile.pageHeight=Number(attr(pg,'h'))/20;}
     const body=nodes(doc,'body')[0];
-    profile.headerText=[...body.children].filter(n=>n.localName==='p').map(textOf).filter(Boolean).slice(0,4).join('\n').slice(0,600);
+    const headerPath=Object.keys(archive).find(path=>/^word\/header\d+\.xml$/.test(path));
+    const footerPath=Object.keys(archive).find(path=>/^word\/footer\d+\.xml$/.test(path));
+    profile.headerText=[headerPath?textOf(xml(headerPath)):'',...[...body.children].filter(n=>n.localName==='p').map(textOf)].filter(Boolean).slice(0,4).join('\n').slice(0,600);
+    profile.footerText=footerPath?textOf(xml(footerPath)).slice(0,300):'';
+    const headerDoc=headerPath?xml(headerPath):null;
+    const blip=headerDoc?nodes(headerDoc,'blip')[0]:null;
+    const embed=blip?.getAttribute('r:embed');
+    if(embed){
+      const relPath='word/_rels/'+headerPath.split('/').pop()+'.rels';
+      const rels=xml(relPath),target=rels?nodes(rels,'Relationship').find(r=>r.getAttribute('Id')===embed)?.getAttribute('Target'):null;
+      const asset=target?archive['word/'+target.replace(/^\.\.\//,'')]:null;
+      if(asset&&/\.(png|jpe?g)$/i.test(target)){
+        const bitmap=await createImageBitmap(new Blob([asset]));
+        const canvas=document.createElement('canvas');canvas.width=Math.min(360,bitmap.width);canvas.height=Math.round(bitmap.height*canvas.width/bitmap.width);
+        canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+        profile.logo=canvas.toDataURL('image/png');profile.logoRatio=canvas.height/canvas.width;
+      }
+    }
     native={tableIndex,headerRow};
     notices.push('DOCX จะรักษาตาราง หัว–ท้ายหน้า และรูปภาพในแม่แบบเดิม; ตรวจข้อความส่วนหัวก่อนส่งออก');
   } else if(format==='xlsx') {
@@ -54,12 +71,12 @@ export async function readTemplate(file) {
     notices.push('ใช้หัวตารางและรูปแบบจากแผ่นงานแรก; ส่งออกเป็นตารางกรองได้โดยไม่รวมเซลล์ข้อมูล');
   } else if(format==='pdf') {
     const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
-    const pages=await extractPdf(file), first=pages[0];
+    const pages=await extractPdf(file,1), first=pages[0];
     const pdf=await loadPdf(file);
     try {
       const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
       profile.pageWidth=vp.width;profile.pageHeight=vp.height;
-      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ/.test(item.text)&&item.box[1]<.4);
+      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|requirement|proposal|reference|result/i.test(item.text)&&item.box[1]<.4);
       if(anchors.length>=3){
         const y=Math.min(...anchors.map(a=>a.box[1]));
         const headerItems=anchors.filter(a=>Math.abs(a.box[1]-y)<.065).sort((a,b)=>a.box[0]-b.box[0]);
