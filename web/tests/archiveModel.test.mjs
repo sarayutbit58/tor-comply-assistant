@@ -15,7 +15,7 @@ test('missing attachments, illegal roles and broken references are rejected befo
   const ref=fixture();ref.project.evidence[0].requirementIds=['absent'];assert.throws(()=>validateManifest(ref),/TOR/);
 });
 test('maximum names and Thai clause labels survive repeated transfers',()=>{
-  const f=fixture();f.project.name='x'.repeat(160);f.project.requirements[0].id='1(ก)';f.project.evidence[0].requirementIds=['1(ก)'];
+  const f=fixture();f.project.name='x'.repeat(160);f.project.requirements[0].id='1(ก)';f.project.evidence[0].requirementIds=['1(ก)'];f.project.rows={'1(ก)':f.project.rows['5.1']};
   const p=validateManifest(f);let i=0;const clone=remapProject(p,()=>String(++i));
   assert.equal(clone.project.name.length,160);
 });

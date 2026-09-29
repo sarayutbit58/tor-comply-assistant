@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import { uniqueRequirements } from '@/lib/torModel.mjs';
 import { STATUS, emptyResponse, migrateProject, linkedRequirements, mergeMark, passProblems, eligibleDocument } from '@/lib/projectModel.mjs';
 const newId = () => crypto.randomUUID();
-const invalidate = (rows, ids) => Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, ids.includes(id) ? { ...row, comparison: STATUS.pending, assessment: null } : row]));
+const invalidate = (rows, ids) => Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, ids.includes(id) ? { ...row, comparison: STATUS.pending, assessment: null, decisionSource: null } : row]));
 const safeStorage = {
   getItem(name) { try { return typeof window === 'undefined' ? null : window.localStorage.getItem(name); } catch { return null; } },
   setItem(name, value) { try { window.localStorage.setItem(name, value); } catch { window.dispatchEvent(new Event('tor-storage-error')); throw new Error('พื้นที่เก็บข้อมูลเบราว์เซอร์เต็มหรือถูกปิด ส่งออกโครงการเพื่อสำรองงาน'); } },
@@ -26,7 +26,7 @@ export const useProjectStore = create()(persist((set, get) => {
       return project.id;
     },
     rename(id, name) { edit(id, p => ({ ...p, name })); },
-    settings(id, patch) { edit(id, p => ({ ...p, ...patch })); },
+    settings(id, patch) { edit(id, p => ({ ...p, ...patch, rows: patch.mode==='manual'?invalidate(p.rows,Object.entries(p.rows).filter(([,r])=>!r.mode&&r.decisionSource==='auto').map(([id])=>id)):p.rows })); },
     deleteProject(id) { set(state => ({ projects: state.projects.filter(p => p.id !== id) })); },
     addRequirements(id, incoming, ocrPage = null) {
       const project = get().projects.find(p => p.id === id);
@@ -38,6 +38,7 @@ export const useProjectStore = create()(persist((set, get) => {
       edit(id, p => {
         const current = p.requirements.find(r => r.id === reqId);
         const nextId = patch.id?.trim() || reqId;
+        if(nextId.length>120||['__proto__','constructor','prototype'].includes(nextId)||/[\u0000-\u001f]/.test(nextId))throw new Error('เลขข้อไม่ถูกต้อง');
         if (nextId !== reqId && p.requirements.some(r => r.id === nextId)) throw new Error('เลขข้อ TOR ซ้ำ');
         if (!patch.textSnapshot?.trim()) throw new Error('ต้องมีข้อความ TOR');
         const next = { ...current, ...patch, id: nextId, reviewed: Boolean(patch.reviewed) };
@@ -93,7 +94,9 @@ export const useProjectStore = create()(persist((set, get) => {
       edit(id, p => {
         const previous = p.rows[reqId] || emptyResponse(reqId);
         const next = { ...previous, ...patch };
-        if (!('comparison' in patch) && ('proposal' in patch || 'itemIds' in patch)) { next.comparison = STATUS.pending; next.assessment = null; }
+        if (!('comparison' in patch) && ('proposal' in patch || 'itemIds' in patch)) { next.comparison = STATUS.pending; next.assessment = null; next.decisionSource=null; }
+        if('comparison' in patch)next.decisionSource='manual';
+        if('mode' in patch&&(next.mode||p.mode)==='manual'&&previous.decisionSource==='auto'){next.comparison=STATUS.pending;next.decisionSource=null;}
         const result = { ...p, rows: { ...p.rows, [reqId]: next } };
         if (next.comparison === STATUS.pass) {
           const errors = passProblems(result, reqId);
@@ -106,11 +109,11 @@ export const useProjectStore = create()(persist((set, get) => {
       edit(id, p => {
         let evidence = p.evidence;
         for (const mark of candidates) evidence = mergeMark({ ...p, evidence }, { ...mark, id: newId(), requirementIds: [reqId] });
-        const row = { ...p.rows[reqId], assessment, proposal: p.rows[reqId].proposal || proposal, comparison: STATUS.pending };
+        const row = { ...p.rows[reqId], assessment, proposal: p.rows[reqId].proposal || proposal, comparison: STATUS.pending, decisionSource: null };
         const result = { ...p, evidence, rows: { ...p.rows, [reqId]: row } };
         if ((row.mode || p.mode) === 'auto' && !p.unreadablePages.length && p.requirements.every(r=>r.reviewed)) {
-          if (assessment.status === 'fail') row.comparison = STATUS.fail;
-          if (assessment.status === 'pass' && !passProblems(result, reqId).length) row.comparison = STATUS.pass;
+          if (assessment.status === 'fail') {row.comparison = STATUS.fail;row.decisionSource='auto';}
+          if (assessment.status === 'pass' && !passProblems(result, reqId).length) {row.comparison = STATUS.pass;row.decisionSource='auto';}
         }
         return result;
       });

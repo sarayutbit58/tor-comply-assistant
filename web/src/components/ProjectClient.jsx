@@ -1,7 +1,7 @@
 'use client';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {useProjectStore} from '@/store/projectStore';
 import {STATUS,evidenceFor,linkedRequirements,exportProblems,rowMode,passProblems} from '@/lib/projectModel.mjs';
 import {PRIORITIES} from '@/lib/complianceRules.mjs';
@@ -33,6 +33,7 @@ export function ProjectClient({projectId}){
   const [filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[tableWidth,setTableWidth]=useState(40),[middleWidth,setMiddleWidth]=useState(30);
   const [box,setBox]=useState(null),[quote,setQuote]=useState(''),[quoteMethod,setQuoteMethod]=useState('text'),[quoteReviewed,setQuoteReviewed]=useState(false),[printedPage,setPrintedPage]=useState(''),[selectedMark,setSelectedMark]=useState(null);
   const [ocrPage,setOcrPage]=useState(1),[ocrDraft,setOcrDraft]=useState(''),[ocrDraftPage,setOcrDraftPage]=useState(null);
+  const pendingReference=useRef(null);
   useEffect(()=>setMounted(true),[]);
   useEffect(()=>{const fail=()=>{setMessage('พื้นที่เก็บข้อมูลเต็มหรือถูกปิด ส่งออกโครงการเพื่อสำรองงาน');setError(true);};window.addEventListener('tor-storage-error',fail);return()=>window.removeEventListener('tor-storage-error',fail);},[]);
   const reqId=project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id;
@@ -55,7 +56,8 @@ export function ProjectClient({projectId}){
   },[project?.torDocId,project?.requirements,project?.unreadablePages]);
   useEffect(()=>{
     if(!requirement)return;
-    const first=marks[0];
+    const first=pendingReference.current&&linkedRequirements(pendingReference.current).includes(reqId)?pendingReference.current:marks[0];
+    pendingReference.current=null;
     setTorPage(requirement.sourcePage||1);
     setView({docId:first?.docId||null,page:first?.pdfPage||1,focus:first?.box||null});
     setSelectedMark(first?.id||null);setBox(null);setQuote('');setQuoteReviewed(false);
@@ -161,11 +163,11 @@ export function ProjectClient({projectId}){
       <div className="workspace-panes" style={{gridTemplateColumns:'minmax(340px,'+tableWidth+'fr) 7px minmax(240px,'+middleWidth+'fr) 7px minmax(240px,'+(100-tableWidth-middleWidth)+'fr)'}}>
         <section className="work-pane table-pane"><div className="pane-title"><div><span className="pane-index">01</span><h2>ตาราง Comply</h2></div><span>{visible.length} ข้อ</span></div>
           <div className="table-toolbar"><input aria-label="ค้นหาข้อ TOR" placeholder="ค้นเลขข้อหรือข้อความ…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="กรองสถานะ" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">ทุกข้อ</option><option value="pending">รอตรวจ</option><option value="pass">Comply</option><option value="fail">ไม่ Comply</option><option value="unreviewed">ยังไม่ตรวจ TOR</option></select></div>
-          <div className="comply-scroll"><table className="comply-grid"><thead><tr><th>ข้อ / รายละเอียด TOR</th><th>รายละเอียดที่เสนอ</th><th>ผล / หลักฐาน</th></tr></thead><tbody>{visible.map(req=>{
+          <div className="comply-scroll"><table className="comply-grid"><thead><tr><th>ข้อ / รายละเอียด TOR</th><th>รายละเอียดที่เสนอ</th><th>ผลเปรียบเทียบ</th><th>เอกสารอ้างอิง</th></tr></thead><tbody>{visible.map(req=>{
             const row=project.rows[req.id],refs=evidenceFor(project,req.id),status=row?.comparison||STATUS.pending;
-            return <tr key={req.id} className={req.id===reqId?'selected-row':''} aria-selected={req.id===reqId}><td><button className="clause-select" onClick={()=>setSelected(req.id)}><strong>{req.id}<span className={req.reviewed?'reviewed-label':'unreviewed-label'}>{req.reviewed?'ตรวจแล้ว':'ตรวจ TOR'}</span></strong><span>{req.textSnapshot}</span></button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}>{row?.proposal||<span className="muted">เลือกสินค้า/บริการแล้วเขียนคำตอบ</span>}</button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}><span className={'status-pill '+(status===STATUS.pass?'pass':status===STATUS.fail?'fail':'pending')}>{status===STATUS.pass?'Comply':status===STATUS.fail?'ไม่ Comply':'รอตรวจ'}</span><small>{refs.length?refs.length+' จุดอ้างอิง':'ยังไม่ผูกหลักฐาน'}</small></button></td></tr>;
+            return <tr key={req.id} className={req.id===reqId?'selected-row':''} aria-selected={req.id===reqId}><td><button className="clause-select" onClick={()=>setSelected(req.id)}><strong>{req.id}<span className={req.reviewed?'reviewed-label':'unreviewed-label'}>{req.reviewed?'ตรวจแล้ว':'ตรวจ TOR'}</span></strong><span>{req.textSnapshot}</span></button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}>{row?.proposal||<span className="muted">เลือกสินค้า/บริการแล้วเขียนคำตอบ</span>}</button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}><span className={'status-pill '+(status===STATUS.pass?'pass':status===STATUS.fail?'fail':'pending')}>{status===STATUS.pass?'Comply':status===STATUS.fail?'ไม่ Comply':'รอตรวจ'}</span><small>{row?.decisionSource==='auto'?'Auto':row?.decisionSource==='manual'?'ยืนยันเอง':''}</small></button></td><td>{refs.length?refs.map(mark=><button key={mark.id} className="reference-cell" onClick={()=>{if(req.id!==reqId)pendingReference.current=mark;setSelected(req.id);openMark(mark);}} title={project.docs.find(d=>d.id===mark.docId)?.name}>{project.docs.find(d=>d.id===mark.docId)?.name}<small>หน้า {mark.printedPage||mark.pdfPage}</small></button>):<span className="empty-reference">ยังไม่ผูกหลักฐาน</span>}</td></tr>;
           })}</tbody></table>{!visible.length&&<div className="pane-empty"><strong>เริ่มจากข้อกำหนด TOR</strong><p>นำเข้า TOR หรือเพิ่มเลขข้อ แล้วตรวจข้อความก่อนประเมิน</p><button className="outline-button" onClick={()=>setDialog('tor')}>จัดการข้อ TOR</button></div>}</div>
-          {requirement&&<ClauseResponse key={reqId+':'+(project.rows[reqId]?.assessment?.ruleVersion||'')+':'+(project.rows[reqId]?.assessment?.status||'')} project={project} requirement={requirement} run={run} busy={busy} onAssess={assess}/>}
+          {requirement&&<ClauseResponse key={reqId} project={project} requirement={requirement} run={run} busy={busy} onAssess={assess}/>}
         </section>
         <Splitter label="ปรับความกว้างตาราง" value={tableWidth} onChange={v=>setTableWidth(Math.max(28,Math.min(50,v)))}/>
         <section className="work-pane"><div className="pane-title"><div><span className="pane-index">02</span><h2>TOR ต้นฉบับ</h2></div><button className="text-button" onClick={()=>setReviewOpen(v=>!v)} disabled={!requirement}>{requirement?.reviewed?'ตรวจอีกครั้ง':'ตรวจข้อความ'}</button></div>

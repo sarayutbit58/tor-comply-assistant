@@ -11,6 +11,7 @@ export function validateManifest(data) {
     if (ids.some(id => typeof id !== 'string' || !id.trim() || id.length>120 || /[\u0000-\u001f]/u.test(id) || ['__proto__','constructor','prototype'].includes(id)) || new Set(ids).size !== ids.length) throw new Error('รหัสข้อมูลซ้ำหรือไม่ถูกต้อง');
   }
   for (const req of p.requirements) if (typeof req.textSnapshot !== 'string' || req.textSnapshot.length > 100000) throw new Error('ข้อความ TOR ไม่ถูกต้อง');
+  if(Object.keys(p.rows).length!==p.requirements.length||p.requirements.some(req=>!Object.hasOwn(p.rows,req.id)))throw new Error('คำตอบไม่ตรงกับเลขข้อ TOR');
   for (const d of p.docs) if (!['product','service','bidder'].includes(d.role) || !Number.isInteger(d.pageCount) || d.pageCount < 1 || !Array.isArray(d.itemIds) || d.itemIds.some(id=>!p.products.some(i=>i.id===id))) throw new Error('ประเภทหรือการผูกไฟล์หลักฐานไม่ถูกต้อง');
   for (const row of Object.values(p.rows)) if (!Array.isArray(row.itemIds) || row.itemIds.some(id=>!p.products.some(i=>i.id===id)) || !Object.values(STATUS).includes(row.comparison) || typeof row.proposal !== 'string') throw new Error('คำตอบในโครงการไม่ถูกต้อง');
   for (const mark of p.evidence) validateMark(p, mark);
