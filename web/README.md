@@ -22,7 +22,7 @@ npm run build
 npm run dev
 ```
 
-บนเครื่อง HQ-NB-BS-02 พื้นที่ว่างต่ำกว่าเกณฑ์ 15 GB จึงไม่ติดตั้งชุด Next.js ลงเครื่องในรอบนี้ ใช้ GitHub Actions ใน `.github/workflows/web.yml` เพื่อตรวจ test/build บน cloud
+บนเครื่อง HQ-NB-BS-02 พื้นที่ว่างต่ำกว่าเกณฑ์ 15 GB จึงไม่ติดตั้งชุด Next.js ลงเครื่องในรอบนี้ ใช้ Vercel preview build ตรวจการคอมไพล์บน cloud และรัน `node --test` สำหรับกฎหลักในเครื่อง
 
 ## ข้อจำกัด
 

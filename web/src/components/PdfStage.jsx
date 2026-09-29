@@ -41,7 +41,14 @@ export default function PdfStage({ docId, pageNumber, marks, resetToken, onBox }
     let cancelled = false;
     setSelection(null);
     setBusy(true);
-    paint(pdf, pageNumber, canvasRef.current).catch(cause => { if (!cancelled) setError(cause.message || 'แสดงหน้า PDF ไม่สำเร็จ'); }).finally(() => { if (!cancelled) setBusy(false); });
+    const scratch = document.createElement('canvas');
+    paint(pdf, pageNumber, scratch).then(() => {
+      if (cancelled || !canvasRef.current) return;
+      const canvas = canvasRef.current;
+      canvas.width = scratch.width;
+      canvas.height = scratch.height;
+      canvas.getContext('2d')?.drawImage(scratch, 0, 0);
+    }).catch(cause => { if (!cancelled) setError(cause.message || 'แสดงหน้า PDF ไม่สำเร็จ'); }).finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
   }, [pdf, paint, pageNumber]);
 
