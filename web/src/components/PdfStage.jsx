@@ -12,8 +12,10 @@ export default function PdfStage({ docId, pageNumber, marks, resetToken, onBox }
   const [selection, setSelection] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [selectMode, setSelectMode] = useState(false);
 
-  useEffect(() => setSelection(null), [resetToken]);
+  useEffect(() => { setSelection(null); setSelectMode(false); }, [resetToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,6 +23,8 @@ export default function PdfStage({ docId, pageNumber, marks, resetToken, onBox }
     setPdf(null);
     setPaint(null);
     setSelection(null);
+    setSelectMode(false);
+    setZoom(1);
     setError('');
     if (!docId) return;
     setBusy(true);
@@ -62,7 +66,7 @@ export default function PdfStage({ docId, pageNumber, marks, resetToken, onBox }
   }
 
   function pointerDown(event) {
-    if (!pdf || busy) return;
+    if (!pdf || busy || (event.pointerType === 'touch' && !selectMode)) return;
     event.preventDefault();
     dragRef.current = point(event);
     stageRef.current.setPointerCapture(event.pointerId);
@@ -80,15 +84,25 @@ export default function PdfStage({ docId, pageNumber, marks, resetToken, onBox }
     if (box[2] > 0.005 && box[3] > 0.005) {
       setSelection(box);
       onBox(box);
-    } else setSelection(null);
+      if (event.pointerType === 'touch') setSelectMode(false);
+    } else {
+      setSelection(null);
+      onBox(null);
+    }
   }
 
   return <div className="rounded-md border border-zinc-200 bg-white">
-    <div className="flex flex-wrap items-center justify-between gap-2 bg-[#262629] px-4 py-3 text-xs text-white"><strong>หน้า PDF {pageNumber}</strong><span className="text-zinc-300">ลากกรอบบนภาพเพื่อเลือกหลักฐาน</span></div>
-    <div className="flex min-h-80 items-start justify-center overflow-auto bg-zinc-200 p-2 sm:p-5">
+    <div className="flex flex-wrap items-center justify-between gap-2 bg-[#262629] px-4 py-3 text-xs text-white"><strong>หน้า PDF {pageNumber}</strong><span className="text-zinc-300">ซูมเพื่ออ่าน แล้วลากกรอบบนคำที่อ้างอิง</span></div>
+    <div className="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-3 py-2 text-xs">
+      <button className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40" type="button" disabled={zoom <= 1} onClick={() => setZoom(value => Math.max(1, value - 0.5))} aria-label="ย่อ PDF">−</button>
+      <span aria-live="polite">{Math.round(zoom * 100)}%</span>
+      <button className="rounded border border-zinc-300 px-2 py-1 disabled:opacity-40" type="button" disabled={zoom >= 3} onClick={() => setZoom(value => Math.min(3, value + 0.5))} aria-label="ขยาย PDF">+</button>
+      <button className={`ml-auto rounded border px-2 py-1 ${selectMode ? 'border-[#ff0038] bg-red-50 text-[#c9002d]' : 'border-zinc-300'}`} type="button" aria-pressed={selectMode} onClick={() => setSelectMode(value => !value)}>เลือกกรอบบนจอสัมผัส</button>
+    </div>
+    <div className={`flex min-h-80 items-start overflow-auto bg-zinc-200 p-2 sm:p-5 ${zoom > 1 ? 'justify-start' : 'justify-center'}`}>
       {!docId ? <p className="m-auto p-8 text-sm text-zinc-600">เพิ่มเอกสาร PDF ก่อน</p> :
-        <div ref={stageRef} className="relative max-w-full touch-none select-none" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-          <canvas ref={canvasRef} className="block h-auto max-w-full bg-white shadow-lg" />
+        <div ref={stageRef} className="relative flex-none select-none" style={{ width: `${zoom * 100}%`, touchAction: selectMode ? 'none' : 'auto' }} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+          <canvas ref={canvasRef} className="block h-auto w-full bg-white shadow-lg" />
           <div className="pointer-events-none absolute inset-0">
             {marks.map(mark => <div key={mark.id} className="absolute border border-yellow-500/70 bg-yellow-200/50" style={{ left: `${mark.box[0] * 100}%`, top: `${mark.box[1] * 100}%`, width: `${mark.box[2] * 100}%`, height: `${mark.box[3] * 100}%` }}><span className="absolute bottom-full left-0 whitespace-nowrap bg-white/90 px-1 text-[10px] font-bold text-red-700">ข้อที่ {mark.number}</span></div>)}
             {selection && <div className="absolute border-2 border-[#ff0038] bg-yellow-200/50" style={{ left: `${selection[0] * 100}%`, top: `${selection[1] * 100}%`, width: `${selection[2] * 100}%`, height: `${selection[3] * 100}%` }} />}

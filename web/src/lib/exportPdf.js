@@ -1,4 +1,5 @@
 import { getFile } from './localFiles';
+import { evidenceBoxToPdf, splitPdfLabel } from './pdfGeometry.mjs';
 
 export async function exportAnnotatedPdf(project, docId) {
   const entry = await getFile(docId);
@@ -18,15 +19,20 @@ export async function exportAnnotatedPdf(project, docId) {
     if (page.getRotation().angle !== 0) throw new Error(`หน้า PDF ${mark.pdfPage} หมุนอยู่ จึงยังไม่ทำเครื่องหมายอัตโนมัติ`);
     const requirement = project.requirements.find(item => item.id === mark.requirementId);
     if (!requirement) continue;
-    const [x, top, width, height] = mark.box;
-    const left = x * page.getWidth();
-    const bottom = (1 - top - height) * page.getHeight();
-    const boxHeight = height * page.getHeight();
-    page.drawRectangle({ x: left, y: bottom, width: width * page.getWidth(), height: boxHeight, color: rgb(1, 0.945, 0.46), opacity: 0.48 });
-    const labelY = Math.min(page.getHeight() - 12, bottom + boxHeight + 3);
+    const visiblePage = page.getCropBox();
+    const rectangle = evidenceBoxToPdf(mark.box, visiblePage);
+    const left = rectangle.x;
+    const bottom = rectangle.y;
+    const boxHeight = rectangle.height;
+    page.drawRectangle({ x: left, y: bottom, width: rectangle.width, height: boxHeight, color: rgb(1, 0.945, 0.46), opacity: 0.48 });
+    const labelY = Math.min(visiblePage.y + visiblePage.height - 12, bottom + boxHeight + 3);
     const color = rgb(0.84, 0, 0.19);
-    page.drawText('ข้อที่', { x: left, y: labelY, size: 9, font, color });
-    page.drawText(` ${requirement.id}`, { x: left + font.widthOfTextAtSize('ข้อที่', 9) + 2, y: labelY, size: 9, font: numberFont, color });
+    let labelX = left;
+    for (const run of splitPdfLabel(requirement.id)) {
+      const selectedFont = run.font === 'thai' ? font : numberFont;
+      page.drawText(run.text, { x: labelX, y: labelY, size: 9, font: selectedFont, color });
+      labelX += selectedFont.widthOfTextAtSize(run.text, 9);
+    }
   }
   return new Blob([await document.save()], { type: 'application/pdf' });
 }

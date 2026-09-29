@@ -2,11 +2,13 @@
 
 import { memo, useEffect, useState } from 'react';
 
-export const ComplyEditorRow = memo(function ComplyEditorRow({ requirement, row, products, evidence, docs, onSave }) {
+export const ComplyEditorRow = memo(function ComplyEditorRow({ requirement, row, products, evidence, docs, onSave, onDirtyChange }) {
   const [proposal, setProposal] = useState(row?.proposal || '');
   const [comparison, setComparison] = useState(row?.comparison || 'รอตรวจสอบ');
   const [productId, setProductId] = useState(row?.productId || '');
   const [error, setError] = useState('');
+  const dirty = proposal !== (row?.proposal || '') || comparison !== (row?.comparison || 'รอตรวจสอบ') || productId !== (row?.productId || '');
+  useEffect(() => onDirtyChange(requirement.id, dirty), [requirement.id, dirty, onDirtyChange]);
   useEffect(() => {
     setProposal(row?.proposal || '');
     setComparison(row?.comparison || 'รอตรวจสอบ');

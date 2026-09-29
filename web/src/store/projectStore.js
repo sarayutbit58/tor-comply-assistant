@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { reviewComparison } from '@/lib/torModel.mjs';
+import { reviewComparison, uniqueRequirements } from '@/lib/torModel.mjs';
 
 const pending = 'รอตรวจสอบ';
 const newId = () => crypto.randomUUID();
@@ -19,8 +19,9 @@ export const useProjectStore = create()(persist((set, get) => ({
 
   createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [] }) {
     const id = newId();
-    const rows = Object.fromEntries(requirements.map(requirement => [requirement.id, emptyRow(requirement.id)]));
-    const project = { id, name: name.trim() || 'โครงการใหม่', torDocId, torFilename, createdAt: new Date().toISOString(), requirements, unreadablePages, ocrPages: [], products: [], docs: [], evidence: [], rows };
+    const distinct = uniqueRequirements(requirements);
+    const rows = Object.fromEntries(distinct.map(requirement => [requirement.id, emptyRow(requirement.id)]));
+    const project = { id, name: name.trim() || 'โครงการใหม่', torDocId, torFilename, createdAt: new Date().toISOString(), requirements: distinct, unreadablePages, ocrPages: [], products: [], docs: [], evidence: [], rows };
     set(state => ({ projects: [project, ...state.projects] }));
     return id;
   },
@@ -34,14 +35,11 @@ export const useProjectStore = create()(persist((set, get) => ({
   },
 
   addRequirements(projectId, incoming, ocrPage = null) {
+    const current = get().projects.find(project => project.id === projectId);
+    if (!current) throw new Error('ไม่พบโครงการ');
+    const additions = uniqueRequirements(incoming, current.requirements);
     set(state => ({ projects: state.projects.map(project => {
       if (project.id !== projectId) return project;
-      const ids = new Set(project.requirements.map(requirement => requirement.id));
-      const additions = incoming.filter(requirement => {
-        if (ids.has(requirement.id)) return false;
-        ids.add(requirement.id);
-        return true;
-      });
       const rows = { ...project.rows };
       for (const requirement of additions) rows[requirement.id] = emptyRow(requirement.id);
       return {
@@ -52,6 +50,7 @@ export const useProjectStore = create()(persist((set, get) => ({
         ocrPages: ocrPage === null ? project.ocrPages : [...project.ocrPages, ocrPage],
       };
     }) }));
+    return additions;
   },
 
   updateRequirement(projectId, requirementId, patch) {
@@ -62,6 +61,7 @@ export const useProjectStore = create()(persist((set, get) => ({
       const nextId = patch.id?.trim() || requirementId;
       if (nextId !== requirementId && project.requirements.some(item => item.id === nextId)) throw new Error('เลขข้อ TOR ซ้ำ');
       const next = { ...current, ...patch, id: nextId, sourceMethod: current.sourceMethod === 'ocr' ? 'ocr-reviewed' : current.sourceMethod };
+      if (nextId !== requirementId) delete next.duplicateOf;
       const requirements = project.requirements.map(item => item.id === requirementId ? next : item);
       const changed = nextId !== requirementId || next.textSnapshot !== current.textSnapshot || next.title !== current.title;
       const rows = { ...project.rows };

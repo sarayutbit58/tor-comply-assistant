@@ -2,6 +2,22 @@ const headingPattern = /^\s*(?:ข้อ\s*)?([0-9๐-๙]+(?:\.[0-9๐-๙]+)*)
 const domainTerms = ['MPLS', 'IPv6', 'IPv4', 'NOC', 'SLA', 'VPN', 'Firewall', 'Switch', 'Router', 'Server', 'Storage', 'วงจร', 'เครือข่าย', 'รายงาน', 'บริการ'];
 const thaiDigits = '๐๑๒๓๔๕๖๗๘๙';
 
+export function uniqueRequirements(incoming, existing = []) {
+  const used = new Set(existing.map(item => item.id));
+  return incoming.map(item => {
+    if (!used.has(item.id)) {
+      used.add(item.id);
+      return item;
+    }
+    const original = item.duplicateOf || item.id.replace(/#\d+$/u, '');
+    let suffix = 2;
+    while (used.has(`${original}#${suffix}`)) suffix += 1;
+    const id = `${original}#${suffix}`;
+    used.add(id);
+    return { ...item, id, duplicateOf: original };
+  });
+}
+
 function sectionNumber(value) {
   return value.replace(/[๐-๙]/gu, digit => String(thaiDigits.indexOf(digit)));
 }
@@ -10,7 +26,8 @@ function heading(raw) {
   const line = raw.trim().replace(/\s+/gu, ' ');
   const match = headingPattern.exec(line);
   if (!match) return null;
-  if (!match[1].includes('.') && !line.startsWith('ข้อ') && line.length < 26) return null;
+  const explicitMarker = /^(?:ข้อ\s*)?[0-9๐-๙]+[.)]\s/u.test(line);
+  if (!match[1].includes('.') && !line.startsWith('ข้อ') && !explicitMarker && line.length < 26) return null;
   return { id: sectionNumber(match[1]), text: match[2] };
 }
 
@@ -35,7 +52,9 @@ export function parsePages(pages, sourceMethod = 'text') {
       continue;
     }
     for (const raw of page.text.split(/\r?\n/u)) {
-      const line = raw.trim();
+      const line = sourceMethod === 'ocr'
+        ? raw.trim().replace(/^ข[^0-9๐-๙]{0,10}(?=[0-9๐-๙]+(?:\.[0-9๐-๙]+)+\s)/u, '')
+        : raw.trim();
       if (!line) continue;
       const found = heading(line);
       if (found) {
@@ -52,7 +71,34 @@ export function parsePages(pages, sourceMethod = 'text') {
   }
   flushLeading();
   if (current) requirements.push(current);
-  return { requirements, unreadablePages };
+  return { requirements: uniqueRequirements(requirements), unreadablePages };
+}
+
+export function parseDocxBlocks(blocks) {
+  const requirements = [];
+  let paragraphs = [];
+  function flushParagraphs() {
+    if (!paragraphs.length) return;
+    requirements.push(...parsePages([{ page: 1, text: paragraphs.join('\n') }]).requirements.map(item => ({ ...item, sourcePage: null })));
+    paragraphs = [];
+  }
+  for (const block of blocks) {
+    if (block.type === 'paragraph') {
+      if (block.text?.trim()) paragraphs.push(block.text.trim());
+      continue;
+    }
+    if (block.type !== 'tableRow') continue;
+    flushParagraphs();
+    const number = String(block.cells?.[0] || '').trim().replace(/[.)]$/u, '');
+    const text = String(block.cells?.[1] || '').trim();
+    if (/^[0-9๐-๙]+(?:\.[0-9๐-๙]+)*$/u.test(number) && text) {
+      requirements.push({ id: sectionNumber(number), title: text.slice(0, 120), textSnapshot: text, sourcePage: null, sourceMethod: 'text' });
+    } else if (!/^(ข้อ|ลำดับ)/u.test(number) && text && requirements.length) {
+      requirements[requirements.length - 1].textSnapshot += '\n' + text;
+    }
+  }
+  flushParagraphs();
+  return { requirements: uniqueRequirements(requirements), unreadablePages: [] };
 }
 
 export function reviewComparison({ proposal, comparison, productId, evidence, docs }) {

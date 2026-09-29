@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePages, reviewComparison, rankDocuments, makeSearchIndex } from '../src/lib/torModel.mjs';
+import { parsePages, parseDocxBlocks, uniqueRequirements, reviewComparison, rankDocuments, makeSearchIndex } from '../src/lib/torModel.mjs';
 
 test('TOR clauses keep their first physical PDF page and continuation text', () => {
   const result = parsePages([
@@ -12,6 +12,33 @@ test('TOR clauses keep their first physical PDF page and continuation text', () 
   assert.equal(result.requirements[0].sourcePage, 1);
   assert.match(result.requirements[0].textSnapshot, /พร้อมรายงานรายเดือน/);
   assert.deepEqual(result.unreadablePages, [3]);
+});
+
+test('short top-level numbered heading keeps its section number', () => {
+  const result = parsePages([{ page: 1, text: '1. วัตถุประสงค์\n1.1 ต้องรองรับ IPv6' }]);
+  assert.deepEqual(result.requirements.map(item => item.id), ['1', '1.1']);
+});
+
+test('OCR keeps a decimal clause number after a short misread ข้อ prefix', () => {
+  const result = parsePages([{ page: 1, text: 'ข้� 5.3 รองรับ IPv6 Addressing' }], 'ocr');
+  assert.equal(result.requirements[0].id, '5.3');
+});
+
+test('DOCX keeps numbered paragraphs and table rows including Thai digits in source order', () => {
+  const result = parseDocxBlocks([
+    { type: 'paragraph', text: '4.16 บริการ NOC' },
+    { type: 'tableRow', cells: ['5.3', 'รองรับ IPv6'] },
+    { type: 'tableRow', cells: ['๕.๔', 'รายงานรายเดือน'] },
+  ]);
+  assert.deepEqual(result.requirements.map(item => item.id), ['4.16', '5.3', '5.4']);
+});
+
+test('duplicate TOR numbers preserve both clauses with separate response keys', () => {
+  const parsed = parsePages([{ page: 1, text: '5.3 ข้อแรก\n5.3 ข้อสอง' }]);
+  assert.deepEqual(parsed.requirements.map(item => item.id), ['5.3', '5.3#2']);
+  assert.equal(parsed.requirements[1].duplicateOf, '5.3');
+  const added = uniqueRequirements([{ id: '5.3', title: 'ข้อที่สาม', textSnapshot: 'ข้อที่สาม' }], parsed.requirements);
+  assert.equal(added[0].id, '5.3#3');
 });
 
 test('pass judgment requires a proposal and evidence for the selected product', () => {
