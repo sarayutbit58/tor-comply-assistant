@@ -3,6 +3,7 @@ import {useEffect,useMemo,useState} from 'react';
 import {useProjectStore} from '@/store/projectStore';
 import {rankItems} from '@/lib/evidenceSearch.mjs';
 import {STATUS,passProblems,rowMode} from '@/lib/projectModel.mjs';
+import {AiClauseAssist} from './AiClauseAssist';
 export function ClauseResponse({project,requirement,run,busy,onAssess}) {
   const row=project.rows[requirement.id];
   const [proposal,setProposal]=useState(row.proposal||'');
@@ -17,6 +18,7 @@ export function ClauseResponse({project,requirement,run,busy,onAssess}) {
     <label className="form-label">รายละเอียดที่เสนอ<textarea aria-label="รายละเอียดที่เสนอ" className="form-input" rows="3" value={proposal} onChange={e=>setProposal(e.target.value)} onBlur={()=>{if(proposal!==row.proposal)save({proposal});}}/></label>
     <div className="response-actions"><button className="outline-button" disabled={busy||!requirement.reviewed||(!row.itemIds.length&&row.scope!=='bidder')} onClick={()=>{if(proposal!==row.proposal&&!save({proposal}))return;onAssess(requirement.id);}}>ค้นหลักฐานและ{rowMode(project,requirement.id)==='auto'?'ประเมิน Auto':'เสนอผล'}</button><button className="brand-button" disabled={busy||problems.length>0} title={problems.join(' · ')} onClick={()=>save({proposal,comparison:STATUS.pass})}>ยืนยัน Comply</button><button className="text-button danger" disabled={busy} onClick={()=>save({proposal,comparison:STATUS.fail})}>ไม่ Comply</button><button className="text-button" onClick={()=>save({comparison:STATUS.pending})}>รอตรวจ</button></div>
     {!!problems.length&&<p className="muted">{problems.join(' · ')}</p>}
+    <AiClauseAssist project={project} requirement={requirement} run={run} busy={busy}/>
     {row.assessment&&<details className="rule-results" open><summary>ผลจากกฎ · {STATUS[row.assessment.status]}</summary>{row.assessment.checks.map((c,i)=><div key={i}><span className={'check-dot '+c.outcome}/><strong>{c.label}</strong><small>{c.reason}</small></div>)}</details>}
   </div>;
 }

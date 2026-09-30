@@ -12,6 +12,9 @@ import {downloadBlob} from '@/lib/download';
 import {ClauseResponse} from './ClauseResponse';
 import {RequirementEditor} from './RequirementEditor';
 import {WorkspaceDialog} from './WorkspaceDialog';
+import {AiSettingsButton} from './AiSettings';
+import {clauseFingerprint} from '@/lib/aiIntegrity.mjs';
+import {aiSession} from '@/lib/aiSession.mjs';
 const PdfStage=dynamic(()=>import('./PdfStage'),{ssr:false,loading:()=> <div className="document-empty">กำลังเปิดเอกสาร…</div>});
 const LibraryManager=dynamic(()=>import('./LibraryManager').then(m=>m.LibraryManager));
 const TemplateSettings=dynamic(()=>import('./TemplateSettings').then(m=>m.TemplateSettings));
@@ -35,6 +38,17 @@ export function ProjectClient({projectId}){
   const [ocrPage,setOcrPage]=useState(1),[ocrDraft,setOcrDraft]=useState(''),[ocrDraftPage,setOcrDraftPage]=useState(null);
   const pendingReference=useRef(null);
   const activeRequirement=useRef(null);
+  const currentCapture=useRef(null);
+  currentCapture.current={reqId:project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id,view,box,ocrPage,torDocId:project?.torDocId};
+  useEffect(()=>{
+    const open=event=>{
+      const detail=event.detail;
+      if(detail.projectId===projectId&&project?.docs.some(d=>d.id===detail.docId)){
+        setSelected(detail.requirementId);setView({docId:detail.docId,page:detail.page,focus:detail.box});setSelectedMark(null);setBox(null);
+      }
+    };
+    window.addEventListener('tor-open-ai-source',open);return()=>window.removeEventListener('tor-open-ai-source',open);
+  },[projectId,project?.docs]);
   useEffect(()=>setMounted(true),[]);
   useEffect(()=>{const fail=()=>{setMessage('พื้นที่เก็บข้อมูลเต็มหรือถูกปิด ส่งออกโครงการเพื่อสำรองงาน');setError(true);};window.addEventListener('tor-storage-error',fail);return()=>window.removeEventListener('tor-storage-error',fail);},[]);
   const reqId=project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id;
@@ -88,7 +102,9 @@ export function ProjectClient({projectId}){
   async function assess(id){
     await run(async()=>{
       const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);
+      const fingerprint=clauseFingerprint(snapshot,id);
       const {assessment,candidates,proposal}=await assessClause(snapshot,id,readIndexed);
+      if(clauseFingerprint(useProjectStore.getState().projects.find(p=>p.id===projectId),id)!==fingerprint)throw new Error('ข้อมูลข้อนี้เปลี่ยนระหว่างประเมิน กรุณาประเมินใหม่');
       actions.applyAssessment(projectId,id,assessment,candidates,proposal);
       const first=evidenceFor(useProjectStore.getState().projects.find(p=>p.id===projectId),id)[0];if(first&&id===activeRequirement.current)openMark(first);
     },'ประเมินแล้ว · ตรวจเหตุผลและหลักฐานของแต่ละเงื่อนไข');
@@ -101,7 +117,10 @@ export function ProjectClient({projectId}){
       for(const req of snapshot.requirements){
         const current=useProjectStore.getState().projects.find(p=>p.id===projectId);
         if(rowMode(current,req.id)!=='auto'||(!current.rows[req.id].itemIds.length&&current.rows[req.id].scope!=='bidder'))continue;
-        const result=await assessClause(current,req.id,readIndexed);actions.applyAssessment(projectId,req.id,result.assessment,result.candidates,result.proposal);count++;
+        const fingerprint=clauseFingerprint(current,req.id);
+        const result=await assessClause(current,req.id,readIndexed);
+        if(clauseFingerprint(useProjectStore.getState().projects.find(p=>p.id===projectId),req.id)!==fingerprint)throw new Error('ข้อมูลข้อ '+req.id+' เปลี่ยนระหว่างประเมิน กรุณาประเมินใหม่');
+        actions.applyAssessment(projectId,req.id,result.assessment,result.candidates,result.proposal);count++;
         await new Promise(resolve=>setTimeout(resolve,0));
       }
       if(!count)throw new Error('ยังไม่มีข้อที่เลือกโหมด Auto และสินค้า/บริการไว้');
@@ -111,8 +130,9 @@ export function ProjectClient({projectId}){
   }
   async function ocrSelection(){
     if(!box||!doc)return;
-    const capture={box:[...box],docId:doc.id,page:view.page};
+    const capture={box:[...box],docId:doc.id,page:view.page,reqId};
     await run(async()=>{
+      const ticket=aiSession.capture('openai');
       const file=await getFile(capture.docId);
       const [{loadPdf,paintPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
       const pdf=await loadPdf(file.blob);
@@ -120,7 +140,10 @@ export function ProjectClient({projectId}){
         const full=document.createElement('canvas');await paintPage(pdf,capture.page,full,2.5);
         const crop=document.createElement('canvas');crop.width=Math.max(1,Math.ceil(capture.box[2]*full.width));crop.height=Math.max(1,Math.ceil(capture.box[3]*full.height));
         crop.getContext('2d').drawImage(full,capture.box[0]*full.width,capture.box[1]*full.height,crop.width,crop.height,0,0,crop.width,crop.height);
-        const result=await recognizeImage(crop.toDataURL('image/png'));setQuote(result.text);setQuoteMethod('ocr');setQuoteReviewed(false);
+        const result=await recognizeImage(crop.toDataURL('image/png'),ticket);
+        const latest=currentCapture.current;
+        if(latest.reqId!==capture.reqId||latest.view.docId!==capture.docId||latest.view.page!==capture.page||JSON.stringify(latest.box)!==JSON.stringify(capture.box))throw new Error('เปลี่ยนหน้า/กรอบแล้ว ผล OCR เดิมถูกยกเลิก');
+        setQuote(result.text);setQuoteMethod('ocr');setQuoteReviewed(false);
       }finally{await pdf.destroy();}
     },'อ่าน OCR เฉพาะกรอบแล้ว ตรวจข้อความก่อนยืนยัน');
   }
@@ -149,11 +172,14 @@ export function ProjectClient({projectId}){
     await run(async()=>{const {exportProjectArchive}=await import('@/lib/projectArchive');const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);downloadBlob(await exportProjectArchive(snapshot),'tor-project.torproj');},'ส่งออกโครงการพร้อมเอกสารต้นฉบับครบแล้ว');
   }
   async function runTorOcr(){
-    const target=ocrPage;
+    const target=ocrPage,source=project.torDocId;
     await run(async()=>{
+      const ticket=aiSession.capture('openai');
       const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบ TOR ต้นฉบับ');
       const [{ocrPdfPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
-      const result=await recognizeImage(await ocrPdfPage(file.blob,target));setOcrDraft(result.text);setOcrDraftPage(target);
+      const result=await recognizeImage(await ocrPdfPage(file.blob,target),ticket);
+      if(currentCapture.current.ocrPage!==target||currentCapture.current.torDocId!==source)throw new Error('เปลี่ยนหน้า/ต้นฉบับแล้ว ผล OCR เดิมถูกยกเลิก');
+      setOcrDraft(result.text);setOcrDraftPage(target);
     },'ตรวจแก้ OCR เทียบต้นฉบับก่อนเพิ่มข้อ');
   }
   if(!mounted)return <div className="loading-workspace">กำลังเปิดพื้นที่ทำงาน…</div>;
@@ -161,7 +187,7 @@ export function ProjectClient({projectId}){
   return <div className="workbench">
     <aside className="workspace-rail"><Link href="/" className="rail-brand" aria-label="โครงการทั้งหมด">1<span>to</span>All</Link><button onClick={()=>setDialog('library')} title="สินค้า บริการ และไฟล์"><b>▧</b><span>ไฟล์</span></button><button onClick={()=>setDialog('tor')} title="นำเข้า OCR และเพิ่มข้อ"><b>≡</b><span>ข้อ TOR</span></button><button onClick={()=>setDialog('template')} title="แม่แบบส่งออก"><b>▤</b><span>แม่แบบ</span></button><button onClick={()=>setDialog('settings')} title="ตั้งค่าโครงการ"><b>⚙</b><span>ตั้งค่า</span></button><div className="rail-bottom">LOCAL<br/>เก็บในเครื่อง</div></aside>
     <div className="workspace-main">
-      <header className="workspace-header"><div><div className="workspace-breadcrumb"><Link href="/">โครงการ</Link><span>/</span><span>{project.domain}</span></div><h1>{project.name}</h1></div><div className="workspace-menu"><select aria-label="โหมดหลักของโครงการ" value={project.mode} onChange={e=>actions.settings(projectId,{mode:e.target.value})}><option value="manual">ตรวจยืนยันเอง</option><option value="auto">Auto ตามกฎ</option></select><button className="outline-button" disabled={busy} onClick={assessAll}>ประเมิน Auto</button><button className="outline-button" disabled={busy} onClick={exportBundle}>สำรองโครงการ</button><details className="export-menu"><summary className="brand-button">ส่งออกตาราง ↓</summary><div>{[['pdf','PDF'],['docx','Word DOCX'],['xlsx','Excel XLSX']].map(([f,label])=><button key={f} disabled={busy} onClick={()=>exportTable(f)}>{label}</button>)}</div></details></div></header>
+      <header className="workspace-header"><div><div className="workspace-breadcrumb"><Link href="/">โครงการ</Link><span>/</span><span>{project.domain}</span></div><h1>{project.name}</h1></div><div className="workspace-menu"><AiSettingsButton/><select aria-label="โหมดหลักของโครงการ" value={project.mode} onChange={e=>actions.settings(projectId,{mode:e.target.value})}><option value="manual">ตรวจยืนยันเอง</option><option value="auto">Auto ตามกฎ</option></select><button className="outline-button" disabled={busy} onClick={assessAll}>ประเมิน Auto</button><button className="outline-button" disabled={busy} onClick={exportBundle}>สำรองโครงการ</button><details className="export-menu"><summary className="brand-button">ส่งออกตาราง ↓</summary><div>{[['pdf','PDF'],['docx','Word DOCX'],['xlsx','Excel XLSX']].map(([f,label])=><button key={f} disabled={busy} onClick={()=>exportTable(f)}>{label}</button>)}</div></details></div></header>
       <div className="workspace-status"><div className="status-counts"><span><i className="check-dot pass"/>{counts.pass} Comply</span><span><i className="check-dot pending"/>{counts.pending} รอตรวจ</span><span><i className="check-dot fail"/>{counts.fail} ไม่ Comply</span></div><span>{project.requirements.filter(r=>r.reviewed).length}/{project.requirements.length} ตรวจ TOR แล้ว · ใช้กฎในโค้ด</span></div>
       {message&&<div role={error?'alert':'status'} className={'workspace-notice '+(error?'notice-error':'')}><span>{message}</span><button aria-label="ปิดข้อความ" onClick={()=>setMessage('')}>×</button></div>}
       <div className="workspace-panes" style={{gridTemplateColumns:'minmax(340px,'+tableWidth+'fr) 7px minmax(240px,'+middleWidth+'fr) 7px minmax(240px,'+(100-tableWidth-middleWidth)+'fr)'}}>
@@ -198,7 +224,7 @@ export function ProjectClient({projectId}){
     {dialog&&<WorkspaceDialog title={{library:'สินค้า บริการ และเอกสาร',template:'แม่แบบตารางส่งออก',settings:'ตั้งค่าโครงการ',tor:'นำเข้าและจัดการข้อ TOR'}[dialog]} onClose={()=>{if(!busy)setDialog(null);}} wide={dialog==='library'||dialog==='template'}>
       {dialog==='library'&&<LibraryManager project={project} run={run} busy={busy} onTemplate={()=>setDialog('template')}/>}
       {dialog==='template'&&<TemplateSettings project={project} run={run} onLibrary={()=>setDialog('library')}/>}
-      {dialog==='settings'&&<div className="stack-form"><label className="form-label">ชื่อโครงการ<input className="form-input" value={project.name} maxLength={160} onChange={e=>actions.rename(projectId,e.target.value)}/></label><label className="form-label">ประเภทงาน<select className="form-input" value={project.domain} onChange={e=>actions.settings(projectId,{domain:e.target.value})}>{[...PRIORITIES,'Software','Surveillance','Parking','Room Booking','Access Control','A/V','PBX / IPBX / Hybrid','อื่น ๆ'].map(d=><option key={d}>{d}</option>)}</select></label><p className="notice">ใช้กฎในโค้ด · ยังไม่เชื่อม AI · ไม่มีค่าเรียก AI API</p><p className="muted">โหมด Auto จะตัดสินเฉพาะเงื่อนไขที่พิสูจน์ได้จากเอกสารของรายการที่เลือก ข้อที่ยังพิสูจน์ไม่ครบจะเป็นรอตรวจ</p></div>}
+      {dialog==='settings'&&<div className="stack-form"><label className="form-label">ชื่อโครงการ<input className="form-input" value={project.name} maxLength={160} onChange={e=>actions.rename(projectId,e.target.value)}/></label><label className="form-label">ประเภทงาน<select className="form-input" value={project.domain} onChange={e=>actions.settings(projectId,{domain:e.target.value})}>{[...PRIORITIES,'Software','Surveillance','Parking','Room Booking','Access Control','A/V','PBX / IPBX / Hybrid','อื่น ๆ'].map(d=><option key={d}>{d}</option>)}</select></label><p className="notice">ใช้กฎในโค้ดเป็นหลัก · AI/OCR ผ่าน API เป็นตัวเลือกช่วงทดสอบ เปิดจาก AI / API Keys</p><p className="muted">โหมด Auto จะตัดสินเฉพาะเงื่อนไขที่พิสูจน์ได้จากเอกสารของรายการที่เลือก ข้อที่ยังพิสูจน์ไม่ครบจะเป็นรอตรวจ</p></div>}
       {dialog==='tor'&&<div className="stack-form">
         {project.torDocId&&<button className="outline-button" onClick={()=>run(async()=>{const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบไฟล์ TOR');downloadBlob(file.blob,project.torFilename);})}>ดาวน์โหลด TOR ต้นฉบับ</button>}
         {project.unreadablePages.length>0&&<section className="ocr-section"><h3>หน้า TOR ที่ยังต้องอ่าน OCR</h3><p className="muted">{project.unreadablePages.join(', ')}</p><div className="form-grid"><label className="form-label">หน้า PDF<input className="form-input" type="number" min="1" max={torCount} value={ocrPage} disabled={busy} onChange={e=>{setOcrPage(Number(e.target.value));setOcrDraft('');setOcrDraftPage(null);setTorPage(Number(e.target.value));}}/></label><button className="outline-button" disabled={busy} onClick={runTorOcr}>อ่านหน้านี้ด้วย OCR</button></div>

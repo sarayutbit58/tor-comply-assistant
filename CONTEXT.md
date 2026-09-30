@@ -12,8 +12,8 @@ Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified thr
 | Stack | Next.js App Router, React, JavaScript/JSX; a few TypeScript configuration/shell files; Tailwind plus workbench CSS |
 | Libraries | Zustand, PDF.js, pdf-lib/fontkit, Tesseract.js, docx, fflate; versions and scripts are authoritative in [web/package.json](web/package.json) |
 | State | Zustand project metadata in localStorage; originals and extracted page data in IndexedDB |
-| Server boundary | Next.js serves the app and static assets; current source contains no application API or server-side document database |
-| AI | Disabled by user decision. Recommendations and Auto verdicts currently use code rules |
+| Server boundary | Next.js serves the app plus a stateless /api/ai relay; no server document/key database |
+| AI | Optional OpenAI OCR/LLM and TypeSafe semantic assistance in the API test phase; Programming still owns verdicts/review gates |
 | Repository | https://github.com/sarayutbit58/tor-comply-assistant |
 | Production | Vercel project `web`: https://web-ten-teal-31.vercel.app |
 
@@ -28,6 +28,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-30 | Added agent entry instructions and architectural handoff; expanded approved requirements from the user interview | `AGENTS.md`, `CONTEXT.md`, `docs/enhancement-scope.md`, README pointer |
 | 2026-09-30 | One Comply source file now supplies selected TOR/number columns and the template; preview, text-only PDF table geometry, DOCX/XLSX table mapping, shared-file protection | `complyIntake.mjs`, `complyBrowser.js`, `pdfTableGrid.mjs`, `ComplyIntakePreview.jsx`, `HomeClient.jsx`; [intake QA](docs/qa-2026-09-30-intake.md) |
 | 2026-09-30 | Debugged narrow PDF columns/header bands, boundary-form precision, nested/unselected DOCX tables and batch evidence focus; verified three formats, source retention and archive restore | 51 Node tests plus scoped browser/artifact checks; see intake QA |
+| 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); verification is recorded separately for this change |
 
 The intake production code through `5c9b182` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
@@ -46,6 +47,9 @@ The intake production code through `5c9b182` was pushed to `main` and its Vercel
 | `components/TemplateSettings.jsx` | Column mapping, style preview, template profile editing |
 | `components/WorkspaceDialog.jsx` | Native dialog lifecycle and focus return |
 | `components/ComplyEditorRow.jsx` | Legacy row component; the current workbench uses `ClauseResponse` |
+| `components/AiSettings.jsx`, `lib/ephemeralKeys.mjs`, `aiSession.mjs` | Memory-only tab keys, lifecycle cancellation and current model choices; never persist these into projectStore |
+| `components/AiClauseAssist.jsx`, `lib/aiIntegrity.mjs` | Explicit current-clause LLM/TypeSafe assistance, verified source quotes and stale-input rejection |
+| `app/api/ai/route.js`, `lib/aiRelay.mjs`, `aiModelPolicy.mjs` | Stateless bounded same-origin provider relay and maintained text/vision recommendations |
 | `web/src/app/globals.css` | Brand tokens, workbench layout, splitters, document/table styles |
 | `store/projectStore.js` | Persisted mutations, schema migration hook, invalidation, assessment application |
 | `lib/projectModel.mjs` | Roles/statuses, shared links, migrations, pass/export guards, file inventory |
@@ -145,7 +149,7 @@ The dated QA record reports **38 passing tests** and browser/artifact checks fro
 
 ## 8. Environment and resources
 
-No application environment variables, AI key, login, or backend database are required for the current workflow. Hosting configuration and any future integrations should be verified before changing this statement.
+Code rules need no key. Optional cloud OCR/LLM requires a user-supplied OpenAI key; System One requires a TypeSafe key. Keys and model selection live only in the current tab, not environment variables, storage, cookies or project archives. Every submission requests a fresh provider model list. Closing/reloading/pagehide clears the session and aborts work. Encryption cannot defeat hostile same-origin JavaScript/extensions; provider data retention is separate.
 
 Use existing user-space Node/Python or the Codex bundled document runtime. The last implementation used cloud compilation because local disk/RAM were constrained; re-measure resource values rather than treating old readings as current. Native Windows paths and quoted OneDrive arguments are required.
 
@@ -156,9 +160,9 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 - The UI is notebook-only, with a 1080px minimum workbench; three pane widths are adjustable.
 - Evidence highlighting uses PDF. DOCX TOR displays extracted clause text and offers the original download; it does not emulate Word pagination.
 - Rotated evidence-page annotation export is rejected. Preserve the visible error until rotation-aware geometry is implemented and verified.
-- Deterministic rules cover known vocabulary and conditions, not every TOR sentence. Unsupported/ambiguous proof needs review; AI integration remains a future decision.
+- Deterministic rules cover known vocabulary and conditions, not every TOR sentence. Unsupported/ambiguous proof needs review. Optional API assistance proposes source-backed text/semantic judgments and does not replace deterministic numeric failures or grant a Comply verdict.
 - Template import is not a general-purpose Office/PDF converter. Comply intake supports compatible DOCX tables, the first XLSX worksheet, and text-PDF column geometry. Mixed table layouts require choosing the appropriate group/columns; PDF boundaries can be corrected in preview.
-- OCR enhancement is deferred for this intake request. The new path rejects PDF pages with no text layer; existing OCR in the independent TOR/evidence workflow remains as previously implemented.
+- Comply-table intake still requires a text layer. TOR-page and selected-evidence-crop OCR now call the chosen OpenAI vision model with human review; no automatic geometry is inferred from generated text.
 - `validateProfile` currently requires the TOR and proposal fields, with 2–12 columns. A submission template should also retain comparison/reference columns from the approved scope; do not assume the validator guarantees every output field.
 - Single files are limited to 40 MB in the UI, and archive originals to 160 MB. The maximum-size archive has not been load-tested.
 - Clearing site storage can delete local projects. The portable archive is the transfer/backup mechanism.

@@ -1,4 +1,6 @@
 import './globals.css';
+import '@/components/ai.css';
+import {AiSessionBoundary} from '@/components/AiSettings';
 
 export const metadata = {
   title: 'TOR Comply | 1toAll',
@@ -8,5 +10,5 @@ export const metadata = {
 export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover' };
 
 export default function RootLayout({ children }) {
-  return <html lang="th"><body>{children}</body></html>;
+  return <html lang="th"><body><AiSessionBoundary>{children}</AiSessionBoundary></body></html>;
 }

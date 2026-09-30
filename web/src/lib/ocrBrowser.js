@@ -1,13 +1,5 @@
-export async function recognizeImage(image) {
-  const { createWorker } = await import('tesseract.js');
-  const worker = await createWorker(['tha', 'eng'], 1, {
-    langPath: '/ocr-data',
-    gzip: false,
-  });
-  try {
-    const result = await worker.recognize(image);
-    return { text: result.data.text || '', confidence: result.data.confidence || 0 };
-  } finally {
-    await worker.terminate();
-  }
+import {aiSession} from './aiSession.mjs';
+export async function recognizeImage(image,ticket) {
+  const result=await aiSession.request('openai','ocr',{image},ticket);
+  return {text:result.text,model:result.model,confidence:null};
 }

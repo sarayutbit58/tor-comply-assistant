@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { AiSettingsButton } from "./AiSettings";
 
 export function AppShell({
   title,
@@ -29,6 +30,7 @@ export function AppShell({
             )}
             </div>
           </div>
+          <AiSettingsButton />
           {path !== "/" && (
             <Link
               href="/"
