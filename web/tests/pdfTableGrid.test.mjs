@@ -7,9 +7,14 @@ test('a colored header keeps its bottom border instead of swallowing the first b
   for(let x=10;x<=190;x++)for(let y=60;y<=100;y++)black(x,y);
   for(const x of [10,50,100,150,190])for(let y=60;y<=300;y++)black(x,y);
   for(const y of [60,100,180,300])for(let x=10;x<=190;x++)black(x,y);
+  // White glyph areas split a filled header into several raster bands.
+  for(let y=78;y<=88;y++)for(const [left,right]of [[20,40],[60,90],[110,140],[160,180]])for(let x=left;x<=right;x++){
+    const i=(y*width+x)*4;data[i]=data[i+1]=data[i+2]=255;
+  }
   const grid=detectTableGrid({width,height,data},4,[.14,.26]);
   assert.ok(grid);
   assert.ok(grid.rows.some(y=>Math.abs(y-.25)<.005));
   assert.ok(grid.rows.some(y=>Math.abs(y-.45)<.005));
   assert.equal(grid.edges.length,5);
+  assert.ok(!grid.rows.some(y=>y>.16&&y<.24));
 });

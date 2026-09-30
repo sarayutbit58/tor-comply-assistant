@@ -23,6 +23,8 @@ export function detectTableGrid({width,height,data},count,headerBand=null) {
     if(Math.max(best,run)>(right-left)*.75)horizontal.push(y);
   }
   // A filled header is a band, not a single border at its center.
-  const rows=bands(horizontal).flatMap(g=>g[g.length-1]-g[0]>4?[g[0]/height,g[g.length-1]/height]:[g.reduce((a,b)=>a+b,0)/g.length/height]);
+  const inside=headerBand?horizontal.filter(y=>y/height>=headerBand[0]&&y/height<=headerBand[1]):[];
+  const outside=inside.length?horizontal.filter(y=>y<inside[0]||y>inside[inside.length-1]):horizontal;
+  const rows=[...bands(outside).flatMap(g=>g[g.length-1]-g[0]>4?[g[0]/height,g[g.length-1]/height]:[g.reduce((a,b)=>a+b,0)/g.length/height]),...(inside.length?[inside[0]/height,inside[inside.length-1]/height]:[])].sort((a,b)=>a-b);
   return {edges:vertical.map(x=>x/width),rows};
 }
