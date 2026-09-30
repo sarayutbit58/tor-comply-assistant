@@ -45,11 +45,19 @@ export function AiSettings() {
   return <div className="stack-form ai-settings">
     <p className="notice">ช่วงทดสอบ · คีย์เข้ารหัสในหน่วยความจำแท็บนี้เท่านั้น ปิดแท็บ/รีโหลดแล้วต้องกรอกใหม่ ไม่มีการบันทึกคีย์ลง Cookies, Cache หรือไฟล์โครงการ</p>
     <ProviderKey provider="openai" title="OpenAI" status={session.openai}/>
-    {session.openai.phase==='ready'&&<div className="form-grid">{[['llmModel','โมเดล LLM'],['ocrModel','โมเดล OCR']].map(([kind,label])=><label key={kind} className="form-label">{label}<select className="form-input" aria-label={label} value={session.openai[kind]} onChange={event=>aiSession.setModel(kind,event.target.value)}><option value="" disabled>เลือกโมเดล · ไม่มีรุ่นงานง่ายที่ใช้ได้</option>{session.openai.models.map(m=><option key={m.id} value={m.id}>{m.id} — {m.label}</option>)}</select><small className="muted">{session.openai.models.find(m=>m.id===session.openai[kind])?.description}</small></label>)}</div>}
-    {session.openai.phase==='ready'&&<p className="muted">แนะนำ {session.openai.models.length}/5 รุ่นจากรายการล่าสุดของคีย์นี้ เริ่มงานง่ายเสมอ รุ่นยากเลือกเองเมื่อรุ่นง่าย/กลางทำไม่ได้ การแบ่งระดับยังไม่ใช่ผล benchmark TOR ภาษาไทย</p>}
+    <ProviderKey provider="openrouter" title="OpenRouter" status={session.openrouter}/>
+    <div className="form-grid">{[['llm','LLM'],['ocr','OCR']].map(([kind,title])=>{
+      const provider=session[kind+'Provider'],status=session[provider],field=kind+'Model';
+      const models=status.models.filter(m=>provider==='openai'||m[kind==='ocr'?'canOcr':'canDraft']);
+      return <div className="stack-form" key={kind}>
+        <label className="form-label">ผู้ให้บริการ {title}<select aria-label={'ผู้ให้บริการ '+title} className="form-input" value={provider} onChange={e=>aiSession.setProvider(kind,e.target.value)}><option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option></select></label>
+        {status.phase==='ready'?<><label className="form-label">โมเดล {title}<select className="form-input" aria-label={'โมเดล '+title} value={status[field]} onChange={e=>aiSession.setModel(field,e.target.value,provider)}><option value="" disabled>เลือกโมเดลที่รองรับงานนี้</option>{models.map(m=><option key={m.id} value={m.id}>{m.id} — {m.label}</option>)}</select></label><small className="muted">{models.find(m=>m.id===status[field])?.description}</small></>:<p className="muted">เชื่อมคีย์ {provider==='openrouter'?'OpenRouter':'OpenAI'} สำหรับงาน {title} ก่อน</p>}
+      </div>;
+    })}</div>
+    <p className="muted">แต่ละบริการแนะนำสูงสุด 5 รุ่นจากรายการล่าสุด OCR แสดงเฉพาะรุ่นรับภาพได้ LLM ผ่าน OpenRouter ต้องรองรับ structured output เริ่มงานง่ายและเปลี่ยนรุ่นเอง การแบ่งระดับยังไม่ใช่ benchmark TOR ภาษาไทย</p>
     <ProviderKey provider="typesafe" title="TypeSafe" status={session.typesafe}/>
     {session.typesafe.phase==='ready'&&<p className="notice">System One: {session.typesafe.model||'บัญชีนี้ไม่มี Jev stable ที่รองรับ'} · เวอร์ชันจริงแสดงในผลแต่ละงาน</p>}
-    <label className="ai-consent"><input type="checkbox" checked={session.consent} onChange={event=>aiSession.setConsent(event.target.checked)}/> อนุญาตส่งเฉพาะข้อความ/ภาพที่เลือกไป OpenAI หรือ TypeSafe เพื่อทดสอบ มีค่าใช้ API ตามบัญชีของฉัน</label>
+    <label className="ai-consent"><input type="checkbox" checked={session.consent} onChange={event=>aiSession.setConsent(event.target.checked)}/> อนุญาตส่งเฉพาะข้อความ/ภาพที่เลือกไป OpenAI, OpenRouter และผู้ให้บริการโมเดลต้นทาง หรือ TypeSafe เพื่อทดสอบ มีค่าใช้ API ตามบัญชีของฉัน</label>
     <p className="muted">คีย์ถูกถอดรหัสชั่วคราวระหว่างส่ง HTTPS ผ่านเซิร์ฟเวอร์แอป การเข้ารหัสไม่ได้ป้องกัน XSS/ส่วนขยายอันตรายทั้งหมด นโยบายเก็บข้อมูลของผู้ให้บริการแยกจากการเก็บข้อมูลในเบราว์เซอร์</p>
     <button className="outline-button" onClick={()=>aiSession.clear()}>ล้างคีย์และการเชื่อมต่อทั้งหมด</button>
   </div>;

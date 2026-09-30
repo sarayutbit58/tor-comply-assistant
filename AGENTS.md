@@ -8,7 +8,7 @@
 
 ## Implementation guardrails
 
-4. Keep this a notebook React/Next.js app with project data in the browser. Optional OpenAI/TypeSafe API testing is authorized in the scope document; keep per-tab credentials outside all persisted project data. Cloud document storage, authentication, cross-device sync, and mobile layouts require a new user request.
+4. Keep this a notebook React/Next.js app with project data in the browser. Optional OpenAI/OpenRouter/TypeSafe API testing is authorized in the scope document; keep per-tab credentials outside all persisted project data. Cloud document storage, authentication, cross-device sync, and mobile layouts require a new user request.
 5. Keep state mutations in `web/src/store/projectStore.js` and domain decisions in the pure model/rule modules. Use the existing helpers for evidence links, selected offerings, review gates, and export rows; UI labels alone must not enforce integrity.
 6. Treat `products` as the collection of both products and services. A clause may select several offerings that are used together. Evidence is shared through `requirementIds`; unlinking one clause must preserve the other links.
 7. Search only explicitly designated evidence documents. TOR text and old Comply-table answers must never enter the evidence index or prove their own compliance.

@@ -132,7 +132,7 @@ export function ProjectClient({projectId}){
     if(!box||!doc)return;
     const capture={box:[...box],docId:doc.id,page:view.page,reqId};
     await run(async()=>{
-      const ticket=aiSession.capture('openai');
+      const ticket=aiSession.captureFor('ocr');
       const file=await getFile(capture.docId);
       const [{loadPdf,paintPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
       const pdf=await loadPdf(file.blob);
@@ -174,7 +174,7 @@ export function ProjectClient({projectId}){
   async function runTorOcr(){
     const target=ocrPage,source=project.torDocId;
     await run(async()=>{
-      const ticket=aiSession.capture('openai');
+      const ticket=aiSession.captureFor('ocr');
       const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบ TOR ต้นฉบับ');
       const [{ocrPdfPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
       const result=await recognizeImage(await ocrPdfPage(file.blob,target),ticket);

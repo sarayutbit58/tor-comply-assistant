@@ -1,7 +1,7 @@
 export function createKeyVault(cryptoApi=globalThis.crypto) {
   const entries=new Map(),versions=new Map();
   let epoch=0;
-  const check=provider=>{if(!['openai','typesafe'].includes(provider))throw new Error('ผู้ให้บริการไม่ถูกต้อง');};
+  const check=provider=>{if(!['openai','openrouter','typesafe'].includes(provider))throw new Error('ผู้ให้บริการไม่ถูกต้อง');};
   return {
     has(provider){return entries.has(provider);},
     async set(provider,secret) {

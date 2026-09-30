@@ -13,7 +13,7 @@ Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified thr
 | Libraries | Zustand, PDF.js, pdf-lib/fontkit, Tesseract.js, docx, fflate; versions and scripts are authoritative in [web/package.json](web/package.json) |
 | State | Zustand project metadata in localStorage; originals and extracted page data in IndexedDB |
 | Server boundary | Next.js serves the app plus a stateless /api/ai relay; no server document/key database |
-| AI | Optional OpenAI OCR/LLM and TypeSafe semantic assistance in the API test phase; Programming still owns verdicts/review gates |
+| AI | Optional OpenAI/OpenRouter OCR/LLM and TypeSafe semantic assistance in the API test phase; Programming still owns verdicts/review gates |
 | Repository | https://github.com/sarayutbit58/tor-comply-assistant |
 | Production | Vercel project `web`: https://web-ten-teal-31.vercel.app |
 
@@ -29,6 +29,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-30 | One Comply source file now supplies selected TOR/number columns and the template; preview, text-only PDF table geometry, DOCX/XLSX table mapping, shared-file protection | `complyIntake.mjs`, `complyBrowser.js`, `pdfTableGrid.mjs`, `ComplyIntakePreview.jsx`, `HomeClient.jsx`; [intake QA](docs/qa-2026-09-30-intake.md) |
 | 2026-09-30 | Debugged narrow PDF columns/header bands, boundary-form precision, nested/unselected DOCX tables and batch evidence focus; verified three formats, source retention and archive restore | 51 Node tests plus scoped browser/artifact checks; see intake QA |
 | 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); [API QA](docs/qa-2026-09-30-ai.md): 71 tests, cloud/browser checks, live Jev; OpenAI credit_balance_exhausted |
+| 2026-09-30 | Added OpenRouter as an independently selected LLM/OCR provider, key-specific authentication, fresh capability-filtered catalogue and chat-completion adapter | [OpenRouter QA](docs/qa-2026-09-30-openrouter.md); keep credentials/selection only in the current tab |
 
 The intake production code through `5c9b182` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
@@ -50,6 +51,7 @@ The intake production code through `5c9b182` was pushed to `main` and its Vercel
 | `components/AiSettings.jsx`, `lib/ephemeralKeys.mjs`, `aiSession.mjs` | Memory-only tab keys, lifecycle cancellation and current model choices; never persist these into projectStore |
 | `components/AiClauseAssist.jsx`, `lib/aiIntegrity.mjs` | Explicit current-clause LLM/TypeSafe assistance, verified source quotes and stale-input rejection |
 | `app/api/ai/route.js`, `lib/aiRelay.mjs`, `aiModelPolicy.mjs` | Stateless bounded same-origin provider relay and maintained text/vision recommendations |
+| `lib/openRouterPolicy.mjs` | Five curated OpenRouter families, refreshed image/structured-output capability checks |
 | `web/src/app/globals.css` | Brand tokens, workbench layout, splitters, document/table styles |
 | `store/projectStore.js` | Persisted mutations, schema migration hook, invalidation, assessment application |
 | `lib/projectModel.mjs` | Roles/statuses, shared links, migrations, pass/export guards, file inventory |
@@ -149,7 +151,7 @@ The dated QA record reports **38 passing tests** and browser/artifact checks fro
 
 ## 8. Environment and resources
 
-Code rules need no key. Optional cloud OCR/LLM requires a user-supplied OpenAI key; System One requires a TypeSafe key. Keys and model selection live only in the current tab, not environment variables, storage, cookies or project archives. Every submission requests a fresh provider model list. Closing/reloading/pagehide clears the session and aborts work. Encryption cannot defeat hostile same-origin JavaScript/extensions; provider data retention is separate.
+Code rules need no key. Optional cloud OCR/LLM uses a user-supplied OpenAI or OpenRouter key; System One uses TypeSafe. LLM/OCR providers are selected separately and captured before document preflight; switching invalidates old tickets. Keys and model selection live only in the current tab, not environment variables, storage, cookies or project archives. Every submission requests a fresh provider model list; OpenRouter authenticates with /api/v1/key before the public catalogue. Closing/reloading/pagehide clears all three providers and aborts work. Encryption cannot defeat hostile same-origin JavaScript/extensions; provider data retention is separate.
 
 Use existing user-space Node/Python or the Codex bundled document runtime. The last implementation used cloud compilation because local disk/RAM were constrained; re-measure resource values rather than treating old readings as current. Native Windows paths and quoted OneDrive arguments are required.
 

@@ -1,5 +1,6 @@
 import {allowedOpenAiModel,recommendedModels,pickSystemOneModel} from './aiModelPolicy.mjs';
 import {validateDraft,validateSemantic} from './aiIntegrity.mjs';
+import {allowedOpenRouterModel,recommendedOpenRouterModels} from './openRouterPolicy.mjs';
 const MAX_BODY=3*1024*1024;
 const HEADERS={'Cache-Control':'no-store, max-age=0','Pragma':'no-cache','Vary':'Origin','X-Content-Type-Options':'nosniff'};
 // Public error enums from OpenAI's current error guide; never forward raw messages.
@@ -54,6 +55,12 @@ function outputText(raw) {
   if(!text(value,24000))fail('โมเดลไม่ได้คืนข้อความที่ใช้งานได้',502);
   return value;
 }
+function chatText(raw) {
+  const choice=raw.choices?.[0];
+  if(choice?.message?.refusal)fail('โมเดลปฏิเสธคำขอนี้',422);
+  if(choice?.finish_reason!=='stop'||!text(choice.message?.content,24000))fail('โมเดลทำงานไม่ครบหรือไม่ได้คืนข้อความ ลองลดข้อมูลหรือเลือกโมเดลอื่น',502);
+  return choice.message.content;
+}
 export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}={}) {
   let timer,controller;
   const abort=()=>controller?.abort();
@@ -66,13 +73,40 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
     const authorization=request.headers.get('authorization')||'';
     if(!/^Bearer [A-Za-z0-9_-]{16,512}$/.test(authorization))fail('กรอก API Key ที่ถูกต้อง',401);
     const body=await readJson(request,MAX_BODY);
-    if(!object(body)||!['openai','typesafe'].includes(body.provider))fail('ผู้ให้บริการไม่ถูกต้อง');
+    if(!object(body)||!['openai','openrouter','typesafe'].includes(body.provider))fail('ผู้ให้บริการไม่ถูกต้อง');
     const allowed=body.action==='models'?['provider','action']:body.action==='ocr'?['provider','action','model','image']:['provider','action','model','requirement','candidates'];
     if(Object.keys(body).some(key=>!allowed.includes(key)))fail('คำขอมีข้อมูลที่ไม่ได้รองรับ');
+    controller=new AbortController();request.signal.addEventListener('abort',abort,{once:true});
+    if(request.signal.aborted)controller.abort();
+    timer=setTimeout(()=>controller.abort(),timeoutMs);
+    const upstreamError=async(status,response,diagnostic)=>{
+      let errorCode;
+      try {
+        const data=diagnostic||await readJson(response,65536);
+        errorCode=[data?.error?.code,data?.error?.type].find(code=>typeof code==='string'&&Object.hasOwn(ERROR_HINTS,code));
+      }catch{/* Provider details are deliberately discarded. */}
+      fail(status===401?'API Key ไม่ถูกต้องหรือถูกยกเลิก':status===402?'เครดิต OpenRouter ไม่พอหรือถึงวงเงินของคีย์ ตรวจเครดิตและ Key limit':
+        status===403?'คีย์นี้ไม่มีสิทธิ์เรียกโมเดล/รายการ':status===429?
+        errorCode?ERROR_HINTS[errorCode]+' ('+errorCode+')':'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':
+        status===400?'ผู้ให้บริการไม่รับคำขอ/โมเดลนี้ ตรวจสิทธิ์หรือเปลี่ยนโมเดล':'ผู้ให้บริการยังไม่พร้อม ลองใหม่ภายหลัง',[400,401,402,403,429].includes(status)?status:502,errorCode);
+    };
+    const providerJson=async(endpoint,payload,max=1024*1024)=>{
+      const response=await fetchImpl(endpoint,{method:payload?'POST':'GET',headers:{Authorization:authorization,'Content-Type':'application/json'},...(payload?{body:JSON.stringify(payload)}:{}),cache:'no-store',redirect:'error',signal:controller.signal});
+      if(!response.ok)await upstreamError(response.status,response);
+      let raw;try{raw=await readJson(response,max);}catch{fail('ผู้ให้บริการคืนข้อมูลที่อ่านไม่ได้',502);}
+      if(object(raw?.error))await upstreamError(Number(raw.error.code)||502,null,raw);
+      return raw;
+    };
+    const routerModels=async()=>recommendedOpenRouterModels(await providerJson('https://openrouter.ai/api/v1/models',null,4*1024*1024));
+    if(body.provider==='openrouter'&&body.action==='models') {
+      const auth=await providerJson('https://openrouter.ai/api/v1/key',null,65536);
+      if(!object(auth.data))fail('ข้อมูลตรวจคีย์ OpenRouter ไม่ถูกต้อง',502);
+      return reply({models:await routerModels(),listedAt:Date.now()});
+    }
     let endpoint,payload,context;
     if(body.action==='models')endpoint=body.provider==='openai'?'https://api.openai.com/v1/models':'https://api.typesafe.ai/v1/models';
-    else if(body.provider==='openai'&&['ocr','draft'].includes(body.action)) {
-      if(!allowedOpenAiModel(body.model))fail('โมเดลนี้ยังไม่อยู่ในรายการที่ทดสอบรองรับ');
+    else if(['openai','openrouter'].includes(body.provider)&&['ocr','draft'].includes(body.action)) {
+      if(!(body.provider==='openrouter'?allowedOpenRouterModel(body.model):allowedOpenAiModel(body.model)))fail('โมเดลนี้ยังไม่อยู่ในรายการที่ทดสอบรองรับ');
       endpoint='https://api.openai.com/v1/responses';
       payload={model:body.model,store:false,max_output_tokens:body.action==='ocr'?4096:6000};
       if(body.action==='ocr') {
@@ -85,6 +119,17 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
         payload.input=[{role:'user',content:[{type:'input_text',text:JSON.stringify(context)}]}];
         payload.text={format:{type:'json_schema',name:'tor_draft',strict:true,schema:draftSchema}};
       }
+      if(body.provider==='openrouter') {
+        const model=(await routerModels()).find(m=>m.id===body.model);
+        if(!model||!model[body.action==='ocr'?'canOcr':'canDraft'])fail('โมเดล OpenRouter นี้ไม่รองรับภาพ OCR หรือ structured output ของงานที่เลือก');
+        endpoint='https://openrouter.ai/api/v1/chat/completions';
+        payload={model:body.model,max_tokens:body.action==='ocr'?4096:6000,stream:false,
+          provider:{require_parameters:true,allow_fallbacks:false,data_collection:'deny'},
+          messages:[{role:'system',content:payload.instructions},{role:'user',content:body.action==='ocr'?
+            [{type:'text',text:'อ่านข้อความตามภาพเพื่อให้ Presales ตรวจเทียบต้นฉบับ'},{type:'image_url',image_url:{url:body.image}}]:JSON.stringify(context)}],
+          ...(body.action==='draft'?{response_format:{type:'json_schema',json_schema:{name:'tor_draft',strict:true,schema:draftSchema}}}:{}),
+        };
+      }
     } else if(body.provider==='typesafe'&&body.action==='semantic') {
       if(!/^jev-(latest|\d+\.\d+(?:\.\d+)?)$/.test(body.model||''))fail('ใช้โมเดล Jev stable ที่ API คืนมา');
       context=sourceContext(body);
@@ -96,32 +141,17 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
       });
       payload={model:body.model,state:context,questions};endpoint='https://api.typesafe.ai/v1/systemone';
     } else fail('คำสั่ง AI ไม่ถูกต้อง');
-    controller=new AbortController();request.signal.addEventListener('abort',abort,{once:true});
-    if(request.signal.aborted)controller.abort();
-    timer=setTimeout(()=>controller.abort(),timeoutMs);
-    const upstream=await fetchImpl(endpoint,{method:payload?'POST':'GET',headers:{Authorization:authorization,'Content-Type':'application/json'},...(payload?{body:JSON.stringify(payload)}:{}),cache:'no-store',redirect:'error',signal:controller.signal});
-    if(!upstream.ok) {
-      const status=upstream.status;
-      let errorCode;
-      try {
-        const diagnostic=await readJson(upstream,65536);
-        errorCode=[diagnostic?.error?.code,diagnostic?.error?.type].find(code=>typeof code==='string'&&Object.hasOwn(ERROR_HINTS,code));
-      }catch{/* Provider details are deliberately discarded. */}
-      fail(status===401?'API Key ไม่ถูกต้องหรือถูกยกเลิก':status===403?'คีย์นี้ไม่มีสิทธิ์เรียกโมเดล/รายการ':status===429?
-        errorCode?ERROR_HINTS[errorCode]+' ('+errorCode+')':'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':
-        status===400?'ผู้ให้บริการไม่รับคำขอ/โมเดลนี้ ตรวจสิทธิ์หรือเปลี่ยนโมเดล':'ผู้ให้บริการยังไม่พร้อม ลองใหม่ภายหลัง',[400,401,403,429].includes(status)?status:502,errorCode);
-    }
-    let raw;
-    try{raw=await readJson(upstream,1024*1024);}catch{fail('ผู้ให้บริการคืนข้อมูลที่อ่านไม่ได้',502);}
+    const raw=await providerJson(endpoint,payload);
     if(body.action==='models') {
       try{
         if(body.provider==='openai')return reply({models:recommendedModels(raw),listedAt:Date.now()});
         return reply({model:pickSystemOneModel(raw),listedAt:Date.now()});
       }catch{fail('รูปแบบรายการโมเดลไม่ถูกต้อง',502);}
     }
-    if(body.action==='ocr')return reply({text:outputText(raw),model:body.model});
+    const generatedText=()=>body.provider==='openrouter'?chatText(raw):outputText(raw);
+    if(body.action==='ocr')return reply({text:generatedText(),model:body.model});
     if(body.action==='draft') {
-      let parsed;try{parsed=validateDraft(JSON.parse(outputText(raw)),context.requirement,context.candidates);}catch{fail('ผล LLM มีข้อความ TOR/อ้างอิงที่ตรวจสอบไม่ได้ จึงไม่บันทึก',422);}
+      let parsed;try{parsed=validateDraft(JSON.parse(generatedText()),context.requirement,context.candidates);}catch{fail('ผล LLM มีข้อความ TOR/อ้างอิงที่ตรวจสอบไม่ได้ จึงไม่บันทึก',422);}
       return reply({result:parsed,model:body.model});
     }
     let result;
