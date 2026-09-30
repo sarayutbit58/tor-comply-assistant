@@ -1,4 +1,5 @@
 import {profileFor,tableRows} from './tableModel.mjs';
+import {canExportNativeWord} from './wordMode.mjs';
 import {getFile} from './localFiles';
 import {readOffice,nodes,WORD_NS} from './officeXml';
 async function nativeWord(project) {
@@ -50,7 +51,7 @@ async function nativeWord(project) {
 }
 
 export async function exportComplyWord(project) {
-  if(project.template?.format==='docx'&&!project.template.native?.rebuildTable)return nativeWord(project);
+  if(canExportNativeWord(project.template))return nativeWord(project);
   const {BorderStyle,Document,Packer,Paragraph,Table,TableCell,TableRow,TextRun,WidthType,ImageRun,Footer,PageNumber}=await import('docx');
   const p=profileFor(project),total=p.columns.reduce((n,c)=>n+c.width,0),usable=(p.pageWidth-2*(p.margin||30))*20;
   const widths=p.columns.map(c=>Math.round(usable*c.width/total));

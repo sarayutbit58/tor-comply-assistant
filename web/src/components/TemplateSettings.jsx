@@ -2,6 +2,7 @@
 import {useState} from 'react';
 import {FIELDS,profileFor,validateProfile,tableRows} from '@/lib/tableModel.mjs';
 import {useProjectStore} from '@/store/projectStore';
+import {canExportNativeWord} from '@/lib/wordMode.mjs';
 export function TemplateSettings({project,run,onLibrary}) {
   const [profile,setProfile]=useState(()=>structuredClone(profileFor(project)));
   const update=(key,value)=>setProfile(p=>({...p,[key]:value}));
@@ -10,6 +11,7 @@ export function TemplateSettings({project,run,onLibrary}) {
   return <div className="stack-form">
     <div className="notice">{project.template?project.template.name:'ใช้รูปแบบมาตรฐาน · เพิ่มแม่แบบ DOCX, PDF หรือ XLSX ได้หนึ่งไฟล์ต่อโครงการ'}<button className="text-button" onClick={onLibrary}>เลือกแม่แบบ</button></div>
     {project.template?.notices?.map(n=><p key={n} className="muted">{n}</p>)}
+    {project.template?.format==='docx'&&!canExportNativeWord(project.template)&&!project.template.native?.rebuildTable&&<p className="notice">แม่แบบนี้ไม่มีข้อมูลโครงสร้าง Word เดิม ผล Word จะใช้หัวคอลัมน์ สี และรูปแบบที่แสดงใน preview หากต้องการโครงสร้างเอกสารเดิม ให้เลือกไฟล์แม่แบบต้นฉบับอีกครั้ง</p>}
     <p className="muted">กำหนดว่าคอลัมน์ใดรับข้อมูลอะไร คำตอบเก่าในแม่แบบจะไม่ถูกนำเข้ามา</p>
     {profile.columns.map((col,i)=><div className="template-column" key={i}><label className="form-label">หัวคอลัมน์ {i+1}<input className="form-input" value={col.heading} onChange={e=>updateColumn(i,{heading:e.target.value})}/></label><label className="form-label">ข้อมูล<select className="form-input" value={col.field} onChange={e=>updateColumn(i,{field:e.target.value})}>{Object.entries(FIELDS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label className="form-label">ความกว้าง<input type="number" min="1" className="form-input" value={col.width} onChange={e=>updateColumn(i,{width:Number(e.target.value)})}/></label></div>)}
     <div className="form-grid"><label className="form-label">ขนาดตัวอักษร<input className="form-input" type="number" min="7" max="24" value={profile.fontSize} onChange={e=>update('fontSize',Number(e.target.value))}/></label><label className="form-label">ชื่อแบบอักษร<input className="form-input" value={profile.font} onChange={e=>update('font',e.target.value)}/></label><label className="form-label">สีหัวตาราง<input type="color" value={'#'+profile.headerFill} onChange={e=>update('headerFill',e.target.value.slice(1))}/></label><label className="form-label">สีข้อความหัวตาราง<input type="color" value={'#'+profile.headerColor} onChange={e=>update('headerColor',e.target.value.slice(1))}/></label></div>

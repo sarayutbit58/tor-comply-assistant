@@ -57,7 +57,7 @@ export function ProjectClient({projectId}){
   },[projectId,project?.docs]);
   useEffect(()=>setMounted(true),[]);
   useEffect(()=>{
-    const ready=e=>{const value=e.detail;if(typeof value?.url==='string'&&value.url.startsWith('blob:'+window.location.origin+'/')&&typeof value.filename==='string'&&Number.isFinite(value.size))setDownloadFile(value);};
+    const ready=e=>{const value=e.detail;if(typeof value?.url==='string'&&value.url.startsWith('blob:'+window.location.origin+'/')&&typeof value.filename==='string'&&Number.isFinite(value.size))setDownloadFile({...value,href:typeof value.href==='string'&&value.href.length<1_400_000&&/^data:application\/octet-stream;base64,[A-Za-z0-9+/]*={0,2}$/.test(value.href)?value.href:value.url});};
     const expired=e=>setDownloadFile(value=>value?.url===e.detail?.url?null:value);
     window.addEventListener('tor-download-ready',ready);window.addEventListener('tor-download-expired',expired);
     return()=>{window.removeEventListener('tor-download-ready',ready);window.removeEventListener('tor-download-expired',expired);clearDownload();};
@@ -208,7 +208,7 @@ export function ProjectClient({projectId}){
       <header className="workspace-header"><div><div className="workspace-breadcrumb"><Link href="/">โครงการ</Link><span>/</span><span>{project.domain}</span></div><h1>{project.name}</h1></div><div className="workspace-menu"><AiSettingsButton/><select aria-label="โหมดหลักของโครงการ" value={project.mode} onChange={e=>actions.settings(projectId,{mode:e.target.value})}><option value="manual">ตรวจยืนยันเอง</option><option value="auto">Auto ตามกฎ</option></select><button className="outline-button" disabled={busy} onClick={assessAll}>ค้นหลักฐานทุกข้อพร้อมทำ</button><button className="outline-button" disabled={busy} onClick={exportBundle}>สำรองโครงการ</button><details className="export-menu"><summary className="brand-button">ส่งออกตาราง ↓</summary><div>{[['pdf','PDF'],['docx','Word DOCX'],['xlsx','Excel XLSX']].map(([f,label])=><button key={f} disabled={busy} onClick={()=>exportTable(f)}>{label}</button>)}</div></details></div></header>
       <div className="workspace-status"><div className="status-counts"><span><i className="check-dot pass"/>{counts.pass} Comply</span><span><i className="check-dot pending"/>{counts.pending} รอตรวจ</span><span><i className="check-dot fail"/>{counts.fail} ไม่ Comply</span></div><span>{project.requirements.filter(r=>r.reviewed).length}/{project.requirements.length} ตรวจ TOR แล้ว · ใช้กฎในโค้ด</span></div>
       {message&&<div role={error?'alert':'status'} className={'workspace-notice '+(error?'notice-error':'')}><span>{message}</span><button aria-label="ปิดข้อความ" onClick={()=>setMessage('')}>×</button></div>}
-      {downloadFile&&<div className="workspace-notice"><span>ไฟล์พร้อมแล้ว · หากไม่เริ่มดาวน์โหลด กดลิงก์นี้ภายใน 2 นาที</span><a className="text-button" href={downloadFile.url} download={downloadFile.filename}>ดาวน์โหลด {downloadFile.filename}</a><button aria-label="ปิดลิงก์ดาวน์โหลด" onClick={clearDownload}>×</button></div>}
+      {downloadFile&&<div className="workspace-notice"><span>ไฟล์พร้อมแล้ว · หากไม่เริ่มดาวน์โหลด กดลิงก์นี้ภายใน 2 นาที</span><a className="text-button" href={downloadFile.href} download={downloadFile.filename}>ดาวน์โหลด {downloadFile.filename}</a><button aria-label="ปิดลิงก์ดาวน์โหลด" onClick={clearDownload}>×</button></div>}
       <div className="copilot-bar"><div><strong>Copilot · ใช้กฎในโค้ด</strong><span>{workflow.next.label}</span></div><button className="outline-button" disabled={busy} onClick={nextTask}>ทำขั้นตอนถัดไป</button>{busy&&<button className="text-button danger" onClick={cancelJob}>ยกเลิกงานที่กำลังทำ</button>}{undo?.before.id===projectId&&<button className="text-button" disabled={busy} onClick={()=>run(async()=>actions.undoLast(projectId),'ย้อนกลับรายการล่าสุดแล้ว')}>ย้อนกลับรายการล่าสุด</button>}{job&&<details><summary>{job.cancelled?'ยกเลิก':job.done+'/'+job.total+' ข้อ'} · ข้าม {job.skipped.length} ข้อ</summary>{job.skipped.map(s=><p key={s.id}>ข้อ {s.id}: {s.reason}</p>)}</details>}</div>
       <div className="workspace-panes" style={{gridTemplateColumns:'minmax(340px,'+tableWidth+'fr) 7px minmax(240px,'+middleWidth+'fr) 7px minmax(240px,'+(100-tableWidth-middleWidth)+'fr)'}}>
         <section className="work-pane table-pane"><div className="pane-title"><div><span className="pane-index">01</span><h2>ตาราง Comply</h2></div><span>{visible.length} ข้อ</span></div>
@@ -254,7 +254,7 @@ export function ProjectClient({projectId}){
         </form>
       </div>}
       {message&&<p role={error?'alert':'status'} className={error?'error-message':'notice'}>{message}</p>}
-      {downloadFile&&<a className="text-button" href={downloadFile.url} download={downloadFile.filename}>ดาวน์โหลด {downloadFile.filename}</a>}
+      {downloadFile&&<a className="text-button" href={downloadFile.href} download={downloadFile.filename}>ดาวน์โหลด {downloadFile.filename}</a>}
     </WorkspaceDialog>}
   </div>;
 }
