@@ -60,7 +60,7 @@ export function HomeClient() {
         savedId=crypto.randomUUID();await putFile(savedId,file,pages.map(p=>p.text),pages);
         if(template)template.id=savedId;
       }
-      const id=createProject({name,torDocId:savedId,torFilename:file?.name||'',requirements,unreadablePages,template,sourceType,sourceTable,sourceWarnings,sourceUnresolvedRows});
+      const id=createProject({name,torDocId:savedId,torFilename:file?.name||'',requirements,unreadablePages,template,sourceType,sourceTable,sourceWarnings,sourceUnresolvedRows,sourcePageCount:file&&/\.pdf$/i.test(file.name)?pages.length:null});
       router.push('/project/'+id);
     } catch(cause) {
       if(savedId&&!useProjectStore.getState().projects.some(p=>projectFileIds(p).includes(savedId)))await deleteFile(savedId).catch(()=>{});

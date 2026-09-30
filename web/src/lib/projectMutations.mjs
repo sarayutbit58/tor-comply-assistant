@@ -38,7 +38,7 @@ function boxValue(value) {
 function physicalPages(requirement) {
   return [...new Set([requirement.sourcePage,...(requirement.sourcePages || [])].filter(page => Number.isInteger(page) && page > 0))];
 }
-function sourceProvenance(requirement) {
+function sourceProvenance(requirement,maxPages) {
   const next = {...requirement};
   if (next.sourcePage!==null && next.sourcePage!==undefined) pageNumber(next.sourcePage);
   if (has(next,'sourcePages')) {
@@ -52,6 +52,8 @@ function sourceProvenance(requirement) {
       return {page:pageNumber(region.page),box:boxValue(region.box)};
     });
   }
+  if(maxPages&&physicalPages(next).some(page=>page>maxPages))throw new Error('หน้า TOR เกินจำนวนหน้าต้นฉบับ');
+  if(maxPages&&next.sourceRegions?.some(region=>region.page>maxPages))throw new Error('กรอบ TOR เกินจำนวนหน้าต้นฉบับ');
   return next;
 }
 function reopenedPages(project, touched) {
@@ -150,7 +152,8 @@ export function updateEvidenceMark(project, markId, patch) {
 
 export function resolveSourcePage(project, page, options) {
   pageNumber(page);
-  fields(options,['confirmed','reason','kind','requirementIds']);
+  fields(options,['confirmed','reason','kind','requirementIds','draft']);
+  if(String(options.draft||'').trim())throw new Error('ยังมีข้อความหน้านี้ที่ไม่ได้เพิ่มเป็นข้อ กรุณาเพิ่มหรือล้างข้อเสนอที่ไม่ใช้ก่อน');
   if (!(project.unreadablePages || []).includes(page)) throw new Error('หน้า TOR นี้ไม่ได้รอการตรวจข้อความ');
   if (options.confirmed!==true) throw new Error('ยืนยันว่าเทียบทั้งหน้ากับต้นฉบับแล้ว');
   const reason = text(options.reason,'เหตุผลการยืนยันหน้า TOR',true,2000);
@@ -182,12 +185,20 @@ function correctionRecord(value, current, next) {
   if (value?.reason) correction.reason = text(value.reason,'เหตุผลการแก้ข้อความ',false,2000);
   return correction;
 }
+export function acceptReadingRepair(project,reqId,{textSnapshot,page=null,box=null,method='manual'},{confirmed,expectedText}={}) {
+ if(confirmed!==true)throw new Error('ยืนยันข้อความที่เสนอเทียบต้นฉบับก่อนใช้');
+ const current=find(project.requirements,reqId,'ข้อ TOR');
+ if(current.textSnapshot!==expectedText)throw new Error('ข้อความในโครงการเปลี่ยนแล้ว กรุณาอ่านใหม่');
+ const patch={textSnapshot,sourcePage:page,sourcePages:page?[page]:[],sourceRegions:page&&box?[{page,box}]:[],sourceCorrection:{method,page,box,reason:'Presales accepted complete clause and its source location'}};
+ const changed=replaceRequirement(project,reqId,patch);
+ return replaceRequirement(changed,reqId,{reviewed:true});
+}
 
 export function replaceRequirement(project, reqId, patch) {
   fields(patch,['id','title','textSnapshot','sourcePage','sourcePages','sourceRegions','sourceMethod','reviewed','sourceCorrection']);
   const current = find(project.requirements,reqId,'ข้อ TOR');
   if (has(patch,'reviewed') && typeof patch.reviewed!=='boolean') throw new Error('สถานะตรวจ TOR ไม่ถูกต้อง');
-  const next = sourceProvenance({...current,...patch,id:has(patch,'id') ? requirementId(patch.id) : reqId});
+  const next = sourceProvenance({...current,...patch,id:has(patch,'id') ? requirementId(patch.id) : reqId},project.sourcePageCount);
   delete next.sourceCorrection;
   if (next.id!==reqId && project.requirements.some(req => req.id===next.id)) throw new Error('เลขข้อ TOR ซ้ำ');
   next.textSnapshot = text(next.textSnapshot,'ข้อความ TOR',true);
@@ -217,7 +228,7 @@ export function appendRequirements(project, incoming, {ocrPage=null}={}) {
   if (ocrPage!==null) pageNumber(ocrPage);
   const validated = incoming.map(value => {
     record(value,'ข้อ TOR ที่เพิ่มไม่ถูกต้อง');
-    const requirement = sourceProvenance({...value,id:requirementId(value.id),textSnapshot:text(value.textSnapshot,'ข้อความ TOR',true,100000),reviewed:false});
+    const requirement = sourceProvenance({...value,id:requirementId(value.id),textSnapshot:text(value.textSnapshot,'ข้อความ TOR',true,100000),reviewed:false},project.sourcePageCount);
     if (has(requirement,'title')) requirement.title = text(requirement.title,'หัวข้อ',false,1000);
     if (ocrPage!==null && !physicalPages(requirement).includes(ocrPage)) throw new Error('ข้อ TOR ไม่ตรงกับหน้า OCR ที่อ่าน');
     return requirement;

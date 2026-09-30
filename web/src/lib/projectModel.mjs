@@ -10,13 +10,16 @@ export function rowMode(project, id) { return project.rows[id]?.mode || project.
 export function emptyResponse(id) { return { requirementId: id, itemIds: [], proposal: '', comparison: STATUS.pending, mode: null, assessment: null }; }
 export function migrateProject(project) {
   const requirements = (project.requirements || []).map(req => ({ ...req, reviewed: Boolean(req.reviewed), sourceMethod: req.sourceMethod || 'text' }));
+  const legacy=project.sourceReviewPolicy!==2;
+  const evidence=(project.evidence||[]).map(mark=>({...mark,requirementIds:linkedRequirements(mark),quote:mark.quote||mark.keyword||'',reviewed:Boolean(mark.reviewed)&&(!legacy||mark.sourceMethod==='ocr'),sourceMethod:mark.sourceMethod||'text'}));
+  const downgraded=evidence.filter(m=>!m.reviewed).flatMap(linkedRequirements);
   return {
-    ...project, schemaVersion: 3, mode: project.mode || 'manual', domain: project.domain || 'Internet',
+    ...project, schemaVersion: 4,sourceReviewPolicy:2, mode: project.mode || 'manual', domain: project.domain || 'Internet',
     requirements, unreadablePages: project.unreadablePages || [], ocrPages: project.ocrPages || [], template: project.template || null,
     products: (project.products || []).map(item => ({ ...item, kind: item.kind || 'product', brand: item.brand || '' })),
     docs: (project.docs || []).map(doc => ({ ...doc, role: doc.role || (doc.productId ? 'product' : 'bidder'), itemIds: doc.itemIds || (doc.productId ? [doc.productId] : []) })),
-    evidence: (project.evidence || []).map(mark => ({ ...mark, requirementIds: linkedRequirements(mark), quote: mark.quote || mark.keyword || '', reviewed: Boolean(mark.reviewed), sourceMethod: mark.sourceMethod || 'text' })),
-    rows: Object.fromEntries(requirements.map(req => [req.id, { ...emptyResponse(req.id), ...project.rows?.[req.id], itemIds: selectedItems(project.rows?.[req.id]) }])),
+    evidence,
+    rows: Object.fromEntries(requirements.map(req => [req.id, { ...emptyResponse(req.id), ...project.rows?.[req.id], itemIds: selectedItems(project.rows?.[req.id]),...(legacy&&downgraded.includes(req.id)?{comparison:STATUS.pending,assessment:null,decisionSource:null}:{}) }])),
   };
 }
 export function validateMark(project, mark) {
@@ -39,11 +42,15 @@ export function passProblems(project, id) {
   const marks = evidenceFor(project, id);
   const problems = [];
   if (!req?.reviewed) problems.push('ยังไม่ได้ตรวจ TOR');
+  if(project.sourcePageCount&&[req?.sourcePage,...(req?.sourcePages||[]),...(req?.sourceRegions||[]).map(r=>r.page)].some(page=>page>project.sourcePageCount))problems.push('หน้า TOR เกินจำนวนหน้าต้นฉบับ');
   if (!row?.proposal.trim()) problems.push('ยังไม่มีรายละเอียดที่เสนอ');
   if (!selectedItems(row).length && row?.scope!=='bidder') problems.push('ยังไม่ได้เลือกสินค้า/บริการ');
   if (!marks.length) problems.push('ยังไม่มีหลักฐาน');
   if (marks.some(needsSourceReview)) problems.push('ยังไม่ได้ตรวจข้อความหลักฐานที่อ้างเทียบต้นฉบับ');
   const docs = marks.map(m => project.docs.find(d => d.id === m.docId)).filter(Boolean);
+  if(marks.some(m=>!project.docs.some(d=>d.id===m.docId)))problems.push('ไม่พบไฟล์หลักฐานที่อ้าง');
+  if(row?.scope==='bidder'&&docs.some(d=>d.role!=='bidder'))problems.push('หลักฐานอยู่นอกขอบเขตคุณสมบัติผู้ยื่นข้อเสนอ');
+  if(row?.scope!=='bidder'&&docs.some(d=>!d.itemIds?.some(itemId=>selectedItems(row).includes(itemId))))problems.push('หลักฐานไม่อยู่ในรายการที่เลือก ต้องยกเลิกการผูกหรือจัดกลุ่มใหม่');
   if (row?.scope==='bidder'&&!docs.some(d=>d.role==='bidder')) problems.push('ยังไม่มีหลักฐานคุณสมบัติผู้ยื่นข้อเสนอ');
   if (marks.some(m=>!m.quote?.trim())) problems.push('หลักฐานไม่มีข้อความที่อ้าง');
   if (docs.some(d => !eligibleDocument(d))) problems.push('ประเภทไฟล์หลักฐานไม่ถูกต้อง');
@@ -56,6 +63,7 @@ export function exportProblems(project) {
   if (project.requirements.some(r => r.duplicateOf)) errors.push('แก้เลขข้อ TOR ซ้ำก่อนส่งออก');
   if (project.unreadablePages.length) errors.push('ยังมีหน้า TOR ที่ต้อง OCR');
   if (project.requirements.some(r => !r.reviewed)) errors.push('ตรวจและยืนยัน TOR ทุกข้อก่อนส่งออก');
+  if(project.sourcePageCount&&project.requirements.some(r=>[r.sourcePage,...(r.sourcePages||[]),...(r.sourceRegions||[]).map(region=>region.page)].some(page=>page>project.sourcePageCount)))errors.push('แก้หน้า TOR ที่เกินจำนวนหน้าต้นฉบับก่อนส่งออก');
   for(const mark of project.evidence)if(needsSourceReview(mark))errors.push(mark.sourceMethod==='ocr'?'ตรวจข้อความหลักฐาน OCR ที่อ้างก่อนส่งออก':'ตรวจข้อความหลักฐานที่อ้างก่อนส่งออก');
   for (const req of project.requirements) if (project.rows[req.id]?.comparison === STATUS.pass) errors.push(...passProblems(project, req.id).map(e => 'ข้อ ' + req.id + ': ' + e));
   return [...new Set(errors)];

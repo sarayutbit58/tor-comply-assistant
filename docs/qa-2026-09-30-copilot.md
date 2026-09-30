@@ -13,6 +13,13 @@ Status: in progress. Baseline `407f017`; source checkpoint `checkpoint/copilot-2
 | Cloud build and notebook browser | Vercel project `web` | Pending |
 | Actual keyless complete loop and exports/archive | Synthetic inputs | Pending |
 
+### Integration corrections before final browser gate
+
+- Fresh suite now 169/169. Added legacy citation review migration (persist/schema 4, unchanged storage key), canonical source page/region repair, physical-page bounds, shared corrected-quote reuse and strict selected-document scope.
+- Retained relevant numeric failing evidence; unreviewed generated citations remain provisional until source review.
+- Page completion blocks a nonempty unsaved OCR/manual draft. Crop quote/review controls are disabled while extraction is pending, and fetched text clears review.
+- Cloud revision `519d27d` compiled and reached READY as `dpl_363ST95YdVLezMnz8g8pzDbPLPuP`; subsequent integration corrections still require build/browser verification.
+
 ## Boundaries to preserve
 
 - Keyless does not mean offline startup. Browser OCR uses Tesseract/WASM and language resources; it runs one worker per explicit operation and allows manual transcription.

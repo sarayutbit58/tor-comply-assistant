@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { uniqueRequirements } from '@/lib/torModel.mjs';
 import { STATUS, emptyResponse, migrateProject, linkedRequirements, mergeMark, passProblems, eligibleDocument } from '@/lib/projectModel.mjs';
-import {appendRequirements,replaceRequirement,removeRequirement,updateOffering,removeOffering,updateDocumentMetadata,removeDocumentMetadata,updateEvidenceMark,resolveSourcePage} from '@/lib/projectMutations.mjs';
+import {appendRequirements,replaceRequirement,removeRequirement,updateOffering,removeOffering,updateDocumentMetadata,removeDocumentMetadata,updateEvidenceMark,resolveSourcePage,acceptReadingRepair} from '@/lib/projectMutations.mjs';
 import {recoverMetadata} from '@/lib/workflowModel.mjs';
 const newId = () => crypto.randomUUID();
 const invalidate = (rows, ids) => Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, ids.includes(id) ? { ...row, comparison: STATUS.pending, assessment: null, decisionSource: null } : row]));
@@ -24,10 +24,10 @@ export const useProjectStore = create()(persist((set, get) => {
     projects: [],
     undo:null,
     undoLast(id){const p=get().projects.find(p=>p.id===id),restored=recoverMetadata(p,get().undo);edit(id,()=>restored);},
-    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet', template = null, sourceType = 'tor', sourceTable = null,sourceWarnings=[],sourceUnresolvedRows=[] }) {
+    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet', template = null, sourceType = 'tor', sourceTable = null,sourceWarnings=[],sourceUnresolvedRows=[],sourcePageCount=null }) {
       const id = newId();
       const distinct = uniqueRequirements(requirements);
-      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, template, sourceType, sourceTable,sourceWarnings,sourceUnresolvedRows,sourceCoveragePending:sourceWarnings.length>0||sourceUnresolvedRows.length>0, rows: {} });
+      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, template, sourceType, sourceTable,sourceWarnings,sourceUnresolvedRows,sourcePageCount,sourceCoveragePending:sourceWarnings.length>0||sourceUnresolvedRows.length>0, rows: {} });
       set(state => ({ projects: [project, ...state.projects] }));
       return id;
     },
@@ -51,16 +51,12 @@ export const useProjectStore = create()(persist((set, get) => {
       edit(id,p=>removeRequirement(p,reqId),true);
     },
     resolveTorPage(id,page,options){edit(id,p=>resolveSourcePage(p,page,options));},
+    setSourcePageCount(id,count){if(!Number.isInteger(count)||count<1)throw new Error('จำนวนหน้า TOR ไม่ถูกต้อง');if(get().projects.find(p=>p.id===id)?.sourcePageCount===count)return;edit(id,p=>({...p,sourcePageCount:count}));},
     confirmSourceCoverage(id,{confirmed,reason}){if(confirmed!==true||!String(reason||'').trim())throw new Error('ตรวจต้นฉบับทุกแถวและระบุผลการตรวจความครบถ้วนก่อน');edit(id,p=>({...p,sourceCoveragePending:false,sourceCoverageResolution:{reason:String(reason).trim(),confirmedAt:new Date().toISOString()},rows:invalidate(p.rows,p.requirements.map(r=>r.id))}));},
     updateProduct(id,itemId,patch){edit(id,p=>updateOffering(p,itemId,patch),true);},
     updateDocument(id,docId,patch){edit(id,p=>updateDocumentMetadata(p,docId,patch),true);},
     acceptSourceCorrection(id,reqId,patch,{confirmed,expectedText}={}){
-      if(!confirmed)throw new Error('ยืนยันข้อความที่เสนอเทียบต้นฉบับก่อนใช้');
-      edit(id,p=>{
-        if(p.requirements.find(r=>r.id===reqId)?.textSnapshot!==expectedText)throw new Error('ข้อความต้นฉบับในโครงการเปลี่ยนแล้ว กรุณาอ่านใหม่');
-        const changed=replaceRequirement(p,reqId,patch);
-        return replaceRequirement(changed,patch.id||reqId,{reviewed:true});
-      });
+      edit(id,p=>acceptReadingRepair(p,reqId,patch,{confirmed,expectedText}),true);
     },
     addProduct(id, item) {
       const itemId = newId();
@@ -122,4 +118,4 @@ export const useProjectStore = create()(persist((set, get) => {
       });
     },
   };
-}, { name: 'tor-comply-web-v2', version: 3, storage: createJSONStorage(() => safeStorage), migrate: state => ({ projects: (state.projects || []).map(migrateProject) }), partialize: state => ({ projects: state.projects }) }));
+}, { name: 'tor-comply-web-v2', version: 4, storage: createJSONStorage(() => safeStorage), migrate: state => ({ projects: (state.projects || []).map(migrateProject) }), partialize: state => ({ projects: state.projects }) }));

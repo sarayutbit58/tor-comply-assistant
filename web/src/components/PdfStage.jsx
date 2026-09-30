@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {getFile} from '@/lib/localFiles';
-export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,focusBox}) {
+export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,focusBox,onPageCount}) {
   const canvasRef=useRef(null),stageRef=useRef(null),scrollRef=useRef(null),dragRef=useRef(null);
   const [pdf,setPdf]=useState(null),[painter,setPainter]=useState(null),[selection,setSelection]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[zoom,setZoom]=useState(1);
   useEffect(()=>{setSelection(null);dragRef.current=null;},[resetToken,docId,pageNumber]);
@@ -13,20 +13,20 @@ export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,f
     (async()=>{
       const entry=await getFile(docId);if(!entry)throw new Error('ไม่พบไฟล์ในเครื่อง กรุณานำเข้าไฟล์โครงการที่มีเอกสารครบ');
       const library=await import('@/lib/pdfBrowser');opened=await library.loadPdf(entry.blob);
-      if(cancelled){await opened.destroy();return;}setPdf(opened);setPainter(()=>library.paintPage);
+      if(cancelled){await opened.destroy();return;}onPageCount?.(opened.numPages);setPdf(opened);setPainter(()=>library.paintPage);
     })().catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setBusy(false);});
     return()=>{cancelled=true;if(opened)opened.destroy();};
-  },[docId]);
+  },[docId,onPageCount]);
   useEffect(()=>{
     if(!pdf||!painter||!canvasRef.current)return;
     let cancelled=false;setBusy(true);setError('');
     const scratch=document.createElement('canvas');
-    painter(pdf,Math.max(1,Math.min(pageNumber,pdf.numPages)),scratch).then(()=>{
+    painter(pdf,pageNumber,scratch).then(()=>{
       if(cancelled||!canvasRef.current)return;
       const canvas=canvasRef.current;canvas.width=scratch.width;canvas.height=scratch.height;canvas.getContext('2d').drawImage(scratch,0,0);
       const target=focusBox?.[1]||0;
       requestAnimationFrame(()=>{if(scrollRef.current&&stageRef.current)scrollRef.current.scrollTop=target*stageRef.current.clientHeight-35;});
-    }).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setBusy(false);});
+    }).catch(e=>{if(!cancelled){setError(e.message);if(canvasRef.current){canvasRef.current.width=0;canvasRef.current.height=0;}}}).finally(()=>{if(!cancelled)setBusy(false);});
     return()=>{cancelled=true;};
   },[pdf,painter,pageNumber,focusBox]);
   function point(event){
@@ -34,7 +34,7 @@ export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,f
     return [Math.max(0,Math.min(1,(event.clientX-bounds.left)/bounds.width)),Math.max(0,Math.min(1,(event.clientY-bounds.top)/bounds.height))];
   }
   const between=(a,b)=>[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1])];
-  function start(event){if(!onBox||!pdf||busy)return;event.preventDefault();dragRef.current=point(event);stageRef.current.setPointerCapture(event.pointerId);setSelection([...dragRef.current,0,0]);onBox(null);}
+  function start(event){if(!onBox||!pdf||busy||error)return;event.preventDefault();dragRef.current=point(event);stageRef.current.setPointerCapture(event.pointerId);setSelection([...dragRef.current,0,0]);onBox(null);}
   function finish(event){if(!dragRef.current)return;const box=between(dragRef.current,point(event));dragRef.current=null;if(box[2]>.005&&box[3]>.005){setSelection(box);onBox(box);}else{setSelection(null);onBox(null);}}
   return <div className="pdf-viewer">
     <div className="pdf-tools"><span>{busy?'กำลังแสดง…':onBox?'ลากกรอบเพื่อผูกหลักฐาน':'TOR ต้นฉบับ'}</span><button aria-label="ย่อ PDF" onClick={()=>setZoom(z=>Math.max(.75,z-.25))} disabled={zoom<=.75}>−</button><span>{Math.round(zoom*100)}%</span><button aria-label="ขยาย PDF" onClick={()=>setZoom(z=>Math.min(3,z+.25))} disabled={zoom>=3}>+</button><button onClick={()=>setZoom(1)}>พอดีช่อง</button></div>

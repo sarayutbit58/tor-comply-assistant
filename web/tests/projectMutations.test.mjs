@@ -13,7 +13,7 @@ const action = name => {
 };
 function fixture() {
   return migrateProject({
-    id:'p', torDocId:'source', template:{id:'source'}, schemaVersion:3,
+    id:'p', torDocId:'source', template:{id:'source'}, schemaVersion:4,sourceReviewPolicy:2,
     requirements:[
       {id:'5.1',textSnapshot:'Support IPv6',sourcePage:1,reviewed:true,sourceTableIndex:0,sourceRow:2},
       {id:'5.2',textSnapshot:'At least 24 ports',sourcePage:1,reviewed:true},
@@ -154,6 +154,10 @@ test('a genuinely blank/non-requirement source page can resolve with an explicit
   const next=resolve(p,3,{confirmed:true,reason:'Cover page, no TOR clauses',kind:'no-requirements'});
   assert.deepEqual(next.unreadablePages,[]); assert.deepEqual(next.sourcePageResolutions[0].requirementIds,[]);
   assert.throws(()=>resolve(fixture(),1,{confirmed:true,reason:'skip',kind:'no-requirements'}),/ข้อ/);
+});
+test('an unsaved OCR/manual page draft cannot be certified as an empty or complete page',()=>{
+ const p=fixture();p.unreadablePages=[3];
+ assert.throws(()=>action('resolveSourcePage')(p,3,{confirmed:true,reason:'cover',kind:'no-requirements',draft:'5.4 Support MPLS'}),/ข้อความ/);
 });
 test('renumbering preserves proposal, selected offerings, source metadata and shared evidence links while clearing the verdict', () => {
   const replace=action('replaceRequirement'), p=fixture(), next=replace(p,'5.1',{id:'5.10',textSnapshot:'Support IPv6',sourcePage:1,reviewed:true});

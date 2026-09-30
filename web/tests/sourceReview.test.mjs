@@ -17,3 +17,9 @@ test('all unreviewed source quotations, including manual and corrected text, blo
   assert.equal(exportProblems(p).length,0);
  }
 });
+test('each cited mark must belong to the current selected offering or bidder scope',()=>{
+ const p=structuredClone(project);p.evidence[0].reviewed=true;p.docs.push({id:'other',role:'product',itemIds:['unselected'],pageCount:1});p.evidence.push({...p.evidence[0],id:'outside',docId:'other'});
+ assert.ok(passProblems(p,'5.1').some(e=>/รายการที่เลือก/.test(e)));assert.ok(exportProblems(p).length);
+ p.rows['5.1'].scope='bidder';p.rows['5.1'].itemIds=[];p.docs.push({id:'bidder',role:'bidder',itemIds:[],pageCount:1});p.evidence.push({...p.evidence[0],id:'bidder',docId:'bidder'});
+ assert.ok(passProblems(p,'5.1').some(e=>/ขอบเขต/.test(e)));
+});
