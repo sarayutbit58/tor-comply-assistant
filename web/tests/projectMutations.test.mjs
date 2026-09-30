@@ -251,6 +251,12 @@ test('recording OCR transcription does not resolve an unreadable source page or 
   assert.equal(next.requirements[3].reviewed,false);
   assert.deepEqual(next.rows['5.1'],p.rows['5.1']);
 });
+test('page transcription preserves raw OCR and accepted text once per physical page',()=>{
+ const p=fixture(),reading={page:1,rawText:'6.1 At least 42 ports',acceptedText:'6.1 At least 24 ports',method:'local-ocr'};
+ const next=action('appendRequirements')(p,[{id:'6.1',textSnapshot:'At least 24 ports',sourcePage:1}],{ocrPage:1,pageReading:reading});
+ assert.deepEqual(next.sourceReadings,[reading]);assert.equal(next.requirements.at(-1).reviewed,false);assert.deepEqual(next.unreadablePages,[1]);
+ assert.throws(()=>action('appendRequirements')(p,[{id:'6.1',textSnapshot:'IPv6',sourcePage:1}],{pageReading:{...reading,page:99}}),/หน้า/);
+});
 test('adding a clause on previously resolved pages reopens each touched page and invalidates its existing clauses', () => {
   const append=action('appendRequirements'), p=fixture();
   p.unreadablePages=[];p.sourcePageResolutions=[1,2].map(page=>({page,kind:'transcribed',reason:'checked',requirementIds:page===1?['5.1','5.2']:['5.3']}));

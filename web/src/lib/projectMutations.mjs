@@ -224,7 +224,7 @@ export function replaceRequirement(project, reqId, patch) {
   };
 }
 
-export function appendRequirements(project, incoming, {ocrPage=null}={}) {
+export function appendRequirements(project, incoming, {ocrPage=null,pageReading=null}={}) {
   if (!Array.isArray(incoming)) throw new Error('ข้อ TOR ที่เพิ่มไม่ถูกต้อง');
   if (ocrPage!==null) pageNumber(ocrPage);
   const validated = incoming.map(value => {
@@ -235,9 +235,17 @@ export function appendRequirements(project, incoming, {ocrPage=null}={}) {
     return requirement;
   });
   const additions = uniqueRequirements(validated,project.requirements);
+  let sourceReadings=project.sourceReadings||[];
+  if(pageReading){
+    fields(pageReading,['page','rawText','acceptedText','method']);pageNumber(pageReading.page);
+    if(!validated.length||validated.some(req=>!physicalPages(req).includes(pageReading.page)))throw new Error('ข้อความที่เพิ่มไม่ตรงกับหน้าอ่านข้อความ');
+    if(!['manual','local-ocr','ocr'].includes(pageReading.method))throw new Error('วิธีอ่านข้อความไม่ถูกต้อง');
+    const reading={page:pageReading.page,rawText:text(pageReading.rawText,'ข้อความที่อ่านครั้งแรก',false,100000),acceptedText:text(pageReading.acceptedText,'ข้อความที่ยอมรับ',true,100000),method:pageReading.method};
+    sourceReadings=[...sourceReadings.filter(entry=>entry.page!==reading.page),reading];
+  }
   const reopen = reopenedPages(project,additions.flatMap(physicalPages));
   const rows = {...invalidateRows(project.rows,reopen.affected),...Object.fromEntries(additions.map(req => [req.id,emptyResponse(req.id)]))};
-  return {...project,requirements:[...project.requirements,...additions],rows,
+  return {...project,requirements:[...project.requirements,...additions],rows,sourceReadings,
     ocrPages:ocrPage!==null ? [...new Set([...(project.ocrPages || []),ocrPage])] : project.ocrPages || [],
     ...reopen.patch,
   };

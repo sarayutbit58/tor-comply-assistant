@@ -23,6 +23,9 @@ test('OCR keeps a decimal clause number after a short misread ข้อ prefix',
   const result = parsePages([{ page: 1, text: 'ข้� 5.3 รองรับ IPv6 Addressing' }], 'ocr');
   assert.equal(result.requirements[0].id, '5.3');
 });
+test('keyless local OCR retains decimal labels under the same short-prefix correction',()=>{
+ const result=parsePages([{page:1,text:'ข้� 5.3 รองรับ IPv6 Addressing'}],'local-ocr');assert.equal(result.requirements[0].id,'5.3');assert.equal(result.requirements[0].sourceMethod,'local-ocr');
+});
 
 test('DOCX keeps numbered paragraphs and table rows including Thai digits in source order', () => {
   const result = parseDocxBlocks([

@@ -7,11 +7,11 @@ import {getFile} from '@/lib/localFiles';
 import {aiSession} from '@/lib/aiSession.mjs';
 const PdfStage=dynamic(()=>import('./PdfStage'),{ssr:false});
 export function ReadingRepair({project,requirement,run,busy,onAccepted}) {
- const [before]=useState(requirement.textSnapshot),[draft,setDraft]=useState(requirement.textSnapshot),[page,setPage]=useState(requirement.sourcePage||1),[box,setBox]=useState(requirement.sourceRegions?.find(r=>r.page===requirement.sourcePage)?.box||null),[confirmed,setConfirmed]=useState(false),[method,setMethod]=useState('manual'),[progress,setProgress]=useState('');
+ const [before]=useState(requirement.textSnapshot),[draft,setDraft]=useState(requirement.textSnapshot),[page,setPage]=useState(requirement.sourcePage||1),[box,setBox]=useState(requirement.sourceRegions?.find(r=>r.page===requirement.sourcePage)?.box||null),[confirmed,setConfirmed]=useState(false),[method,setMethod]=useState('manual'),[progress,setProgress]=useState(''),[reading,setReading]=useState(false);
  const pdf=project.torDocId&&/\.pdf$/i.test(project.torFilename),comparison=compareReadings(before,draft),risks=readingRisks(before);
  const change=value=>{setDraft(value);setConfirmed(false);};
  async function reread(ocr) {
-  await run(async()=>{
+  setReading(true);try{await run(async()=>{
    const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบต้นฉบับ TOR');
    if(!ocr){change(box?readingInBox(file.pages?.find(p=>p.page===page),box):file.pageTexts?.[page-1]||'');setMethod('geometry');return;}
    const ticket=aiSession.captureLocalOcr();
@@ -24,11 +24,11 @@ export function ReadingRepair({project,requirement,run,busy,onAccepted}) {
     const result=await recognizeImage(crop.toDataURL('image/png'),ticket,{onProgress:p=>setProgress(p.status+' '+Math.round((p.progress||0)*100)+'%')});
     change(result.text);setMethod('local-ocr');
    }finally{setProgress('');await handle.destroy();}
-  },'อ่านข้อความใหม่แล้ว ตรวจส่วนที่เปลี่ยนก่อนยอมรับ');
+  },'อ่านข้อความใหม่แล้ว ตรวจส่วนที่เปลี่ยนก่อนยอมรับ');}finally{setReading(false);}
  }
  return <div className="repair-grid">
   <section className="repair-source">{pdf?<><label className="form-label">หน้า PDF ต้นฉบับ<input type="number" min="1" max={project.sourcePageCount} className="form-input" value={page} disabled={busy} onChange={e=>{setPage(Math.max(1,Math.min(project.sourcePageCount||1,Number(e.target.value)||1)));setBox(null);setConfirmed(false);}}/></label><PdfStage docId={project.torDocId} pageNumber={page} resetToken={page} onBox={busy?undefined:b=>{setBox(b);setConfirmed(false);}} focusBox={box}/></>:<div className="notice">ต้นฉบับ {project.torFilename||'ข้อความที่กรอกเอง'}{requirement.sourceRow!==undefined?' · แถว '+(requirement.sourceRow+1):''}<p>Office ไม่มีหน้า PDF จำลอง เปิดไฟล์ต้นฉบับจากเมนูข้อ TOR เพื่อตรวจเทียบ</p></div>}
-   {pdf&&<div className="response-actions"><button className="outline-button" disabled={busy} onClick={()=>reread(false)}>อ่านชั้นข้อความจากกรอบ</button><button className="outline-button" disabled={busy} onClick={()=>reread(true)}>OCR ในเครื่องจากกรอบ</button></div>}
+   {pdf&&<div className="response-actions"><button className="outline-button" disabled={busy} onClick={()=>reread(false)}>อ่านชั้นข้อความจากกรอบ</button><button className="outline-button" disabled={busy} onClick={()=>reread(true)}>OCR ในเครื่องจากกรอบ</button>{reading&&<button className="text-button danger" onClick={()=>aiSession.cancelJobs()}>ยกเลิก OCR</button>}</div>}
    {progress&&<p role="status">{progress}</p>}
   </section>
   <section className="stack-form"><strong>ตรวจแก้ข้อ {requirement.id}</strong>

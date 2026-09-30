@@ -57,7 +57,7 @@ export function parsePages(pages, sourceMethod = 'text') {
     const lines=rebuilt?.lines||reading.split(/\r?\n/u).map(text=>({text,box:null}));
     for (const sourceLine of lines) {
       const raw=sourceLine.text;
-      const line = sourceMethod === 'ocr'
+      const line = (sourceMethod === 'ocr'||sourceMethod==='local-ocr')
         ? raw.trim().replace(/^ข[^0-9๐-๙]{0,10}(?=[0-9๐-๙]+(?:\.[0-9๐-๙]+)+\s)/u, '')
         : raw.trim();
       if (!line) continue;

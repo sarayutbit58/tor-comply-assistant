@@ -38,10 +38,10 @@ export const useProjectStore = create()(persist((set, get) => {
     rename(id, name) { edit(id, p => ({ ...p, name })); },
     settings(id, patch) { edit(id, p => ({ ...p, ...patch, rows: patch.mode==='manual'?invalidate(p.rows,Object.entries(p.rows).filter(([,r])=>!r.mode&&r.decisionSource==='auto').map(([id])=>id)):p.rows })); },
     deleteProject(id) { set(state => ({ projects: state.projects.filter(p => p.id !== id) })); },
-    addRequirements(id, incoming, ocrPage = null) {
+    addRequirements(id, incoming, ocrPage = null,options={}) {
       const project = get().projects.find(p => p.id === id);
       const additions = uniqueRequirements(incoming, project.requirements).map(r => ({...r,reviewed:false}));
-      edit(id,p=>appendRequirements(p,incoming,{ocrPage}));
+      edit(id,p=>appendRequirements(p,incoming,{...options,ocrPage}));
       return additions;
     },
     updateRequirement(id, reqId, patch) {
