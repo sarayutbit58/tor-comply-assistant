@@ -85,3 +85,11 @@ test('AI context excludes TOR/template and evidence for an unselected offering',
   const extra=['tor','template','other'].map(id=>({...candidates[0],id,docId:id}));
   assert.deepEqual(integrity.aiCandidates(sample,'5.1',[...candidates,...extra]).map(c=>c.docId),['doc']);
 });
+
+test('AI shortlist sends one physical excerpt when a saved highlight and search match overlap',()=>{
+ const sample=structuredClone(project);
+ sample.evidence=[{...candidates[0],id:'saved',requirementIds:['5.1']}];
+ const result=integrity.aiCandidates(sample,'5.1',candidates);
+ assert.equal(result.length,1);
+ assert.equal(result[0].id,'saved');
+});

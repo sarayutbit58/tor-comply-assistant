@@ -14,10 +14,11 @@ export function clauseFingerprint(project,id) {
 export function aiCandidates(project,id,candidates) {
   const row=project.rows[id];
   const docs=project.docs.filter(d=>eligibleDocument(d)&&(row.scope==='bidder'?d.role==='bidder':d.itemIds.some(i=>row.itemIds.includes(i))));
-  const ids=new Set(docs.map(d=>d.id)),seen=new Set();
+  const ids=new Set(docs.map(d=>d.id)),seen=new Set(),physical=[];
   return [...evidenceFor(project,id),...candidates].filter(c=>{
     if(!ids.has(c.docId)||!c.quote?.trim()||seen.has(c.id))return false;
-    seen.add(c.id);return true;
+    if(physical.some(old=>old.docId===c.docId&&old.pdfPage===c.pdfPage&&normalized(old.quote)===normalized(c.quote)&&old.box?.every((value,i)=>Math.abs(value-c.box?.[i])<.003)))return false;
+    seen.add(c.id);physical.push(c);return true;
   }).slice(0,16).map(c=>({...c,role:docs.find(d=>d.id===c.docId).role}));
 }
 export function validateDraft(result,requirement,candidates) {
