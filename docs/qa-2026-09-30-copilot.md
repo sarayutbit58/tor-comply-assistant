@@ -20,6 +20,20 @@ Status: in progress. Baseline `407f017`; source checkpoint `checkpoint/copilot-2
 - Page completion blocks a nonempty unsaved OCR/manual draft. Crop quote/review controls are disabled while extraction is pending, and fetched text clears review.
 - Cloud revision `519d27d` compiled and reached READY as `dpl_363ST95YdVLezMnz8g8pzDbPLPuP`; subsequent integration corrections still require build/browser verification.
 
+### Browser observations at `342b6c9`
+
+Vercel production `web`, deployment `dpl_659TPViEBdahUfVoxmbW26qYEaAi` reached READY. Synthetic project `54ff59e9-3dbb-479a-8192-9c6eca0c93f2`:
+
+- Imported `qa-tor.pdf`: 4 clauses, correct first-page/second-page navigation, all initially unreviewed.
+- Reviewed four source clauses, created product and warranty service, designated and associated two PDF proof files.
+- Sequential local batch completed 4/4, skipped 0; generated source highlights/answers and shared one physical mark across 5.1/5.4. All new citations awaited review. CDP request observation: 0 `/api/ai` calls, not truncated, no more events.
+- Reviewed four physical proof locations. Manual assessment showed a pass suggestion while the table remained pending until explicit confirmation. Project Auto then produced four Comply rows after all source checks.
+- Corrected the shared quotation with a synthetic negative sentence: 5.1 and 5.4 invalidated together; table export blocked by source-review error. Latest-edit recovery restored original text/review/verdicts.
+- Native `window.confirm` blocked the in-app QA driver during clause deletion. A fresh tab preserved the saved four-clause project, but input remained blocked by the outstanding confirmation. Asked the user to cancel that browser dialog; browser QA is incomplete until actual interaction resumes.
+- Replaced workbench recoverable-delete confirmations with inline two-step buttons and kept multi-offering choices open during selection. This UI follow-up needs cloud/browser verification. No permanent customer deletion occurred.
+
+Actual PDF/DOCX/XLSX/annotated PDF/archive generation and local scan OCR are still unverified for this revision. The attempted PDF download did not produce a newly verified artifact; previous Downloads files are not evidence for this build.
+
 ## Boundaries to preserve
 
 - Keyless does not mean offline startup. Browser OCR uses Tesseract/WASM and language resources; it runs one worker per explicit operation and allows manual transcription.

@@ -1,4 +1,5 @@
 'use client';
+import {DeleteButton} from './DeleteButton';
 import {useState} from 'react';
 import {useProjectStore} from '@/store/projectStore';
 import {putFile,deleteFile,getFile} from '@/lib/localFiles';
@@ -46,7 +47,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
       </>}
       <button className="dark-button" disabled={busy}>เพิ่ม{kind==='product'?'สินค้า':'บริการ'}</button>
     </form>
-    <div className="item-list">{project.products.filter(i=>i.kind===kind).map(item=><div key={item.id}><div><strong>{item.name}</strong><small>{[item.brand,item.model,item.provider,item.bandwidth,item.endpoints].filter(Boolean).join(' · ')}</small></div><button className="text-button" disabled={busy} onClick={()=>setEditingItem(item.id)}>แก้ไข</button><button className="text-button danger" disabled={busy} onClick={()=>{if(window.confirm('ลบรายการนี้และยกเลิกผลที่เกี่ยวข้อง?'))run(async()=>actions.removeProduct(project.id,item.id),'ลบรายการแล้ว · ย้อนกลับจากหน้าทำงานได้');}}>ลบ</button></div>)}</div>
+    <div className="item-list">{project.products.filter(i=>i.kind===kind).map(item=><div key={item.id}><div><strong>{item.name}</strong><small>{[item.brand,item.model,item.provider,item.bandwidth,item.endpoints].filter(Boolean).join(' · ')}</small></div><button className="text-button" disabled={busy} onClick={()=>setEditingItem(item.id)}>แก้ไข</button><DeleteButton disabled={busy} confirmation="ยืนยันลบรายการ" onConfirm={()=>run(async()=>actions.removeProduct(project.id,item.id),'ลบรายการแล้ว · ย้อนกลับจากหน้าทำงานได้')}/></div>)}</div>
     {editingItem&&project.products.find(i=>i.id===editingItem)&&<OfferingEditor key={editingItem} item={project.products.find(i=>i.id===editingItem)} busy={busy} onCancel={()=>setEditingItem(null)} onSave={patch=>run(async()=>{actions.updateProduct(project.id,editingItem,patch);setEditingItem(null);},'แก้รายการแล้ว ผลที่เกี่ยวข้องถูกยกเลิก')}/>}
   </section><section>
     <h3>จัดประเภทเอกสาร</h3><p className="muted">TOR และแม่แบบจะไม่ถูกนำมาค้นเป็นหลักฐาน</p>
@@ -59,7 +60,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
     <div className="file-inventory">
       <div><span className="file-role">{project.sourceType==='comply-table'?'ตารางต้นฉบับ':'TOR'}</span><span>{project.torFilename||'กรอกข้อ TOR เอง'}</span></div>
       {project.template&&<div><span className="file-role">แม่แบบ</span><span>{project.template.name}</span><button className="text-button" onClick={onTemplate}>ตั้งค่า</button></div>}
-      {project.docs.map(doc=><div key={doc.id}><span className="file-role">{FILE_ROLES[doc.role]}</span><span>{doc.name}<small>{doc.pageCount} หน้า · {doc.itemIds.map(id=>project.products.find(i=>i.id===id)?.name).filter(Boolean).join(', ')||'ทั้งโครงการ'}</small></span><button className="text-button" disabled={busy} onClick={()=>setEditingDoc(doc.id)}>แก้ไข</button><button className="text-button" onClick={()=>run(async()=>{const entry=await getFile(doc.id);if(!entry)throw new Error('ไม่พบต้นฉบับ');downloadBlob(entry.blob,doc.name);})}>ต้นฉบับ</button><button className="text-button danger" disabled={busy} onClick={()=>{if(window.confirm('นำเอกสารและไฮไลต์ที่เกี่ยวข้องออกจากโครงการ? ย้อนกลับรายการล่าสุดได้'))run(async()=>actions.removeDocument(project.id,doc.id),'นำเอกสารออกแล้ว · เก็บต้นฉบับในเครื่องเพื่อย้อนกลับ');}}>นำออก</button></div>)}
+      {project.docs.map(doc=><div key={doc.id}><span className="file-role">{FILE_ROLES[doc.role]}</span><span>{doc.name}<small>{doc.pageCount} หน้า · {doc.itemIds.map(id=>project.products.find(i=>i.id===id)?.name).filter(Boolean).join(', ')||'ทั้งโครงการ'}</small></span><button className="text-button" disabled={busy} onClick={()=>setEditingDoc(doc.id)}>แก้ไข</button><button className="text-button" onClick={()=>run(async()=>{const entry=await getFile(doc.id);if(!entry)throw new Error('ไม่พบต้นฉบับ');downloadBlob(entry.blob,doc.name);})}>ต้นฉบับ</button><DeleteButton label="นำออก" disabled={busy} confirmation="ยืนยันนำไฟล์ออก" onConfirm={()=>run(async()=>actions.removeDocument(project.id,doc.id),'นำเอกสารออกแล้ว · เก็บต้นฉบับในเครื่องเพื่อย้อนกลับ')}/></div>)}
     </div>
     {editingDoc&&project.docs.find(d=>d.id===editingDoc)&&<DocumentEditor key={editingDoc} doc={project.docs.find(d=>d.id===editingDoc)} offerings={project.products} busy={busy} onCancel={()=>setEditingDoc(null)} onSave={patch=>run(async()=>{actions.updateDocument(project.id,editingDoc,patch);setEditingDoc(null);},'แก้กลุ่มไฟล์แล้ว ต้นฉบับยังอยู่ ผลที่เกี่ยวข้องถูกยกเลิก')}/>}
   </section></div>;
