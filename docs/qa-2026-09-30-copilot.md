@@ -44,6 +44,12 @@ Actual PDF/DOCX/XLSX/annotated PDF/archive generation and local scan OCR are sti
 
 ## Boundaries to preserve
 
+### Continued browser QA
+
+- The original QA tab became interactive again. Its native-confirm deletion had completed; latest-edit recovery restored clause 5.3, the physical mark and all four prior responses. Reloaded current code and verified default local OCR/empty provider keys.
+- Clicking table PDF completed with the UI message `สร้างไฟล์ส่งออกแล้ว`, no browser console error, but no new download event/local artifact was observed. This proves renderer completion only, not saved output.
+- Added a reusable visible download link and bounded Blob URL lifecycle for automatic-download fallback. Lifecycle regression initially failed, then passed; actual link/artifact gate remains next.
+
 - Keyless does not mean offline startup. Browser OCR uses Tesseract/WASM and language resources; it runs one worker per explicit operation and allows manual transcription.
 - New source quotations always require human review. File role, selected offering scope and physical page/region still determine eligible proof.
 - Source repair keeps before/after text and source provenance; acceptance invalidates old verdicts. Editing a completed scan page reopens its page check.
