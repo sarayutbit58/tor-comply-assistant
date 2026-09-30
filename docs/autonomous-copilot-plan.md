@@ -67,3 +67,5 @@ Implementation keeps pure decisions in lib/*.mjs and browser adapters/UI separat
 ## Completion audit
 
 Maintain a dated QA record linking each criterion/Uxx to unit output, actual browser behavior or exported artifact. Untested, indirect or weak evidence means incomplete. Accuracy on arbitrary future TORs and absence of all future bugs cannot be guaranteed; preserve explicit limitations.
+
+Current audit: criterion 1 verified; 2–6 implemented with 170 passing model regressions and a keyless four-clause browser journey. Local-worker scan/Office browser coverage, complete CRUD/repair and cancellation still need fresh UI evidence. Criterion 7 actual artifacts/restore pending; 8 optional-provider regression tests and keyless requests observed; 9 docs/deploy recorded with final browser gate incomplete. See [current QA](qa-2026-09-30-copilot.md). Resume after cancelling the blocked native confirmation, then verify each remaining gate before closing the goal.

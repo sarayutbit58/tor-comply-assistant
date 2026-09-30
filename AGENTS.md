@@ -4,7 +4,7 @@
 
 1. Read [CONTEXT.md](CONTEXT.md) before changing this repository. Check `git status --short --branch` and inspect the files relevant to the task; preserve unrelated user changes.
 2. **Product behavior:** read [docs/enhancement-scope.md](docs/enhancement-scope.md) before changing workflows, compliance rules, file roles, review gates, templates, or exports. It records the approved decisions. A newer direct user instruction takes precedence; update the affected decision when it changes.
-3. **Debugging:** read the available `auditing-debugging-applications` skill before investigation, and use `systematic-debugging` for defects. Read [docs/qa-2026-09-29.md](docs/qa-2026-09-29.md) for previous regressions and tested boundaries. Historical QA is evidence for its recorded revision, not proof for new changes.
+3. **Debugging:** read the available `auditing-debugging-applications` skill before investigation, and use `systematic-debugging` for defects. For current keyless work read [docs/qa-2026-09-30-copilot.md](docs/qa-2026-09-30-copilot.md) and the pending gates in [docs/autonomous-copilot-plan.md](docs/autonomous-copilot-plan.md); older QA records establish only their named revisions. Historical QA is evidence for its recorded revision, not proof for new changes.
 
 ## Implementation guardrails
 
@@ -13,7 +13,7 @@
 6. Treat `products` as the collection of both products and services. A clause may select several offerings that are used together. Evidence is shared through `requirementIds`; unlinking one clause must preserve the other links.
 7. Search only explicitly designated evidence documents. TOR text and old Comply-table answers must never enter the evidence index or prove their own compliance.
 8. Preserve the review gates and invalidation paths when requirements, selections, responses, evidence, or source files change. A pass must remain traceable to the selected offerings and actual cited text.
-9. Preserve persisted projects. The existing storage key intentionally still contains `v2` while the schema is version 3. Use migrations; changing keys or clearing storage is not a migration.
+9. Preserve persisted projects. The existing storage key intentionally still contains `v2` while persist/schema is version 4; source-review policy 2 downgrades legacy automatically approved text citations. Use migrations; changing keys or clearing storage is not a migration.
 10. Keep binary files in IndexedDB through `localFiles.js`. Use dynamic imports for PDF/OCR/Office/archive libraries at the point of use. Preserve error handling and worker/document cleanup.
 11. Preserve the single-source/three-export workflow. A Comply table can supply explicitly selected clause-number/TOR columns and layout in one intake; standalone templates supply layout. Old proposals/verdicts/references never initialize answers or evidence. Keep Excel filterable and supported native DOCX structure intact.
 

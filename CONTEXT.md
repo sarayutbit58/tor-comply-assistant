@@ -2,7 +2,7 @@
 
 Audience: coding agents and maintainers. Read this for the code map; use [the approved scope](docs/enhancement-scope.md) for product decisions.
 
-Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. See dated QA records for tested boundaries. Paths below are relative to the repository root.
+Last updated: 2026-09-30 (Asia/Bangkok). Keyless Copilot implementation is in progress through `5637554`; [current QA](docs/qa-2026-09-30-copilot.md) distinguishes verified browser paths from blocked final gates. Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. See dated QA records for tested boundaries. Paths below are relative to the repository root.
 
 ## 1. Overview and quick reference
 
@@ -13,7 +13,7 @@ Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified thr
 | Libraries | Zustand, PDF.js, pdf-lib/fontkit, Tesseract.js, docx, fflate; versions and scripts are authoritative in [web/package.json](web/package.json) |
 | State | Zustand project metadata in localStorage; originals and extracted page data in IndexedDB |
 | Server boundary | Next.js serves the app plus a stateless /api/ai relay; no server document/key database |
-| AI | Optional OpenAI/OpenRouter OCR/LLM and TypeSafe semantic assistance in the API test phase; Programming still owns verdicts/review gates |
+| AI/OCR | Keyless rules/manual correction and local OCR default; optional OpenAI/OpenRouter OCR/LLM and TypeSafe semantic assistance remain explicit |
 | Repository | https://github.com/sarayutbit58/tor-comply-assistant |
 | Production | Vercel project `web`: https://web-ten-teal-31.vercel.app |
 
@@ -76,7 +76,7 @@ The ignored `work/` folder holds session scratch files. Its Babel parser script 
 
 ## 4. Domain model and storage schema
 
-Project metadata uses schema version **3**. The Zustand persist configuration uses version **3**, but keeps localStorage key **`tor-comply-web-v2`** for legacy continuity.
+Project metadata and Zustand persist use version **4**. Source-review policy **2** requires explicit source review; migration downgrades legacy text marks/affected verdicts while preserving answers and originals. The localStorage key remains **`tor-comply-web-v2`** for continuity.
 
 IndexedDB database: **`tor-comply-files-v1`**, object store **`files`**, database version **1**. Entries contain `{ id, blob, pageTexts, pages }`. A page may include text items with normalized boxes; these support quote extraction and candidate highlighting.
 
@@ -95,7 +95,7 @@ IndexedDB database: **`tor-comply-files-v1`**, object store **`files`**, databas
 
 Use `linkedRequirements`, `selectedItems`, `evidenceFor`, and `projectFileIds` rather than assuming legacy singular fields. Migrations preserve old `requirementId/productId` data through these helpers.
 
-For Comply-table intake, `torDocId` and `template.id` initially reference the **same** IndexedDB Blob. `projectFileIds` deduplicates it. Replacing a template must retain that Blob while it remains the TOR source. Additive source metadata uses the existing schema version 3.
+For Comply-table intake, `torDocId` and `template.id` initially reference the **same** IndexedDB Blob. `projectFileIds` deduplicates it. Replacing a template must retain that Blob while it remains the TOR source. Source provenance includes `rawTextSnapshot/sourcePages/sourceRegions/sourceCorrections`; project coverage includes `sourcePageCount/sourceWarnings/sourceUnresolvedRows/sourceCoveragePending/sourcePageResolutions`.
 
 Intake reads only the chosen TOR and number columns. Old answers remain visible only in the original file; response rows are newly initialized. DOCX compatible tables retain `sourceTableIndex` for native export; recognized but unselected Comply tables are excluded so their old responses cannot leak into output. Direct table-row indexing must agree between intake, template extraction, and export, including nested prefix tables.
 
@@ -118,7 +118,7 @@ The authoritative acceptance criteria are in [docs/enhancement-scope.md](docs/en
 
 - Evidence-role eligibility and shared links: `projectModel.mjs`.
 - TOR review prerequisites and selected-file candidate scope: `evidenceSearch.mjs`, reinforced by store assessment application.
-- Complete support for a pass and cited OCR review: `passProblems`; submission-table gates: `exportProblems`.
+- Complete support for a pass and review of every cited source quotation: `passProblems`; submission-table gates: `exportProblems`.
 - Mathematical/semantic decisions: `complianceRules.mjs`. Preserve numeric tokens, unit case semantics, metric dimensions, polarity, conditional statements, and conflicting assertions.
 - Legacy data continuity: `migrateProject` plus the persist migration hook.
 - Complete source transfer: `archiveModel.mjs` and `projectArchive.js`.
@@ -143,7 +143,7 @@ Choose checks by the changed boundary:
 | Rules / ranking | Numeric units/dimensions, exact speed lists, polarity, missing/conflicting proof, joint evidence; corresponding Node tests |
 | Store / review / UI | Reproduce edit → invalidate → review → confirm; single/project Auto gates; clause navigation and shared unlink |
 | Parsing / intake | Empty/filled/reordered source tables, sparse cells, inline/separate numbers, continuation pages, nested/multiple tables, old-answer exclusion, shared source/template archive |
-| OCR (separate scope) | Captured page and explicit review; current Comply intake requires text-readable files and does not add OCR |
+| OCR/manual repair | Keyless scan TOR/proof, captured page/region, cancellation, unsaved-draft page guard, reviewed full-page completion; table layout is still text-only |
 | Archive | Complete originals, new project IDs, shared references, round trip, corrupt/missing bytes and rollback |
 | Template / exports | Native prefixes/header/footer, sentinel old-answer exclusion, column mapping, colors, editable Excel, long PDF pagination; inspect actual artifacts |
 | Documentation | Read referenced files, verify relative links/path names, review scope consistency, `git diff --check` |
@@ -152,7 +152,7 @@ The dated QA record reports **38 passing tests** and browser/artifact checks fro
 
 ## 8. Environment and resources
 
-Code rules need no key. Optional cloud OCR/LLM uses a user-supplied OpenAI or OpenRouter key; System One uses TypeSafe. LLM/OCR providers are selected separately and captured before document preflight; switching invalidates old tickets. Keys and model selection live only in the current tab, not environment variables, storage, cookies or project archives. Every submission requests a fresh provider model list; OpenRouter authenticates with /api/v1/key before the public catalogue. Closing/reloading/pagehide clears all three providers and aborts work. Encryption cannot defeat hostile same-origin JavaScript/extensions; provider data retention is separate.
+Code rules need no key. Optional cloud OCR/LLM uses a user-supplied OpenAI or OpenRouter key; System One uses TypeSafe. LLM/OCR providers are selected separately and captured before document preflight; switching invalidates old tickets. The OCR selector defaults to local Tesseract, with no key or cloud consent. Worker cancellation/timeout and manual transcription keep the keyless path available. Keys and cloud model selection live only in the current tab, not environment variables, storage, cookies or project archives. Every submission requests a fresh provider model list; OpenRouter authenticates with /api/v1/key before the public catalogue. Closing/reloading/pagehide clears all three providers and aborts work. Encryption cannot defeat hostile same-origin JavaScript/extensions; provider data retention is separate.
 
 Use existing user-space Node/Python or the Codex bundled document runtime. The last implementation used cloud compilation because local disk/RAM were constrained; re-measure resource values rather than treating old readings as current. Native Windows paths and quoted OneDrive arguments are required.
 
@@ -165,7 +165,7 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 - Rotated evidence-page annotation export is rejected. Preserve the visible error until rotation-aware geometry is implemented and verified.
 - Deterministic rules cover known vocabulary and conditions, not every TOR sentence. Unsupported/ambiguous proof needs review. Optional API assistance proposes source-backed text/semantic judgments and does not replace deterministic numeric failures or grant a Comply verdict.
 - Template import is not a general-purpose Office/PDF converter. Comply intake supports compatible DOCX tables, the first XLSX worksheet, and text-PDF column geometry. Mixed table layouts require choosing the appropriate group/columns; PDF boundaries can be corrected in preview.
-- Comply-table intake still requires a text layer. TOR-page and selected-evidence-crop OCR now call the chosen OpenAI vision model with human review; no automatic geometry is inferred from generated text.
+- Comply-table mapping still requires a text layer. Scan TOR/proof has local OCR/manual paths; optional cloud OCR uses the explicitly selected provider. Geometry comes from the selected actual page/region. Actual local-worker browser accuracy and final export/archive gates for this enhancement remain pending in the current QA record.
 - `validateProfile` currently requires the TOR and proposal fields, with 2–12 columns. A submission template should also retain comparison/reference columns from the approved scope; do not assume the validator guarantees every output field.
 - Single files are limited to 40 MB in the UI, and archive originals to 160 MB. The maximum-size archive has not been load-tested.
 - Clearing site storage can delete local projects. The portable archive is the transfer/backup mechanism.
@@ -175,3 +175,12 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 ## 10. Continuing work
 
 Load only the landmarks needed for the task after this handoff. Keep approved behavior in the scope document, architecture/status in this file, and dated observations in a QA record. A new user decision changes the relevant source of truth; it does not require duplicating the whole interview across documents.
+
+## Keyless Copilot implementation handoff — 2026-09-30
+
+- Pure boundaries: `readingModel.mjs`, `projectMutations.mjs`, `workflowModel.mjs`, `localOcr.mjs`, `docxNumbering.mjs`, `xlsxSourceRows.mjs`.
+- Workbench tools: `ReadingRepair`, `SourcePageTools`, `EvidenceEditor`, metadata resource editing, inline `DeleteButton`; sequential local batch progress/cancel.
+- Undo keeps one in-memory metadata snapshot until the next persisted project mutation. Removed document blobs remain in IndexedDB for recovery; archive includes referenced files only.
+- Source repair acceptance records before/after and canonical page/region; normal source-page edits clear stale regions. Editing resolved scan clauses reopens page coverage.
+- Latest cloud code build `5637554` reached READY (`dpl_UcAArW3Gq4BvKkdM293swxSNLzT5`). A following source-page regression fix is being verified/published.
+- Final acceptance is still pending: in-app browser native confirmation blocked input; user cancellation requested. Resume actual local OCR, inline CRUD, source repair, artifact generation/inspection and archive restoration before declaring the goal achieved.

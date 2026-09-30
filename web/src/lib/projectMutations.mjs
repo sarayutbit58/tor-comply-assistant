@@ -197,6 +197,7 @@ export function acceptReadingRepair(project,reqId,{textSnapshot,page=null,box=nu
 export function replaceRequirement(project, reqId, patch) {
   fields(patch,['id','title','textSnapshot','sourcePage','sourcePages','sourceRegions','sourceMethod','reviewed','sourceCorrection']);
   const current = find(project.requirements,reqId,'ข้อ TOR');
+  if(has(patch,'sourcePage')&&patch.sourcePage!==current.sourcePage)patch={...patch,...(!has(patch,'sourcePages')?{sourcePages:patch.sourcePage?[patch.sourcePage]:[]}:{}),...(!has(patch,'sourceRegions')?{sourceRegions:[]}: {})};
   if (has(patch,'reviewed') && typeof patch.reviewed!=='boolean') throw new Error('สถานะตรวจ TOR ไม่ถูกต้อง');
   const next = sourceProvenance({...current,...patch,id:has(patch,'id') ? requirementId(patch.id) : reqId},project.sourcePageCount);
   delete next.sourceCorrection;

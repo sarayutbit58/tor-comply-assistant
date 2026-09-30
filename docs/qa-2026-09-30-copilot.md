@@ -34,6 +34,14 @@ Vercel production `web`, deployment `dpl_659TPViEBdahUfVoxmbW26qYEaAi` reached R
 
 Actual PDF/DOCX/XLSX/annotated PDF/archive generation and local scan OCR are still unverified for this revision. The attempted PDF download did not produce a newly verified artifact; previous Downloads files are not evidence for this build.
 
+### Latest verification / pending handoff
+
+- Fresh serial Node suite: **170 passed, 0 failed**. Full output retained in ignored `work/copilot-tests.txt`.
+- Ordinary clause-page edits now reset old source pages/regions rather than retaining stale provenance (new red/green regression).
+- Inline-delete code `5637554` reached READY (`dpl_UcAArW3Gq4BvKkdM293swxSNLzT5`). The next commit records source-page regression and documentation.
+- Browser input remains blocked by the earlier native confirmation. Documented dialog/close/recovery controls could not dismiss it; an independent DevTools browser had a different profile and was not used to pretend the session recovered. User cancellation requested asynchronously; tab opening was queued in the Codex UI.
+- Acceptance is **incomplete** until real local scan OCR/manual page completion, inline CRUD/repair, three output formats/annotated proof and archive round trip are verified. Keep the goal active; no final successful handoff is claimed.
+
 ## Boundaries to preserve
 
 - Keyless does not mean offline startup. Browser OCR uses Tesseract/WASM and language resources; it runs one worker per explicit operation and allows manual transcription.
