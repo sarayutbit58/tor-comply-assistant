@@ -1,4 +1,5 @@
 import { migrateProject, projectFileIds, validateMark, STATUS } from './projectModel.mjs';
+import {FIELDS,profileFor,validateProfile} from './tableModel.mjs';
 export const ARCHIVE_VERSION = 1;
 export const MAX_ARCHIVE_BYTES = 160 * 1024 * 1024;
 const has=(value,key)=>Object.prototype.hasOwnProperty.call(value,key);
@@ -16,6 +17,59 @@ function box(value) {
   const [x,y,w,h]=value;if(x<0 || y<0 || w<=0 || h<=0 || x+w>1.001 || y+h>1.001)throw new Error('กรอบต้นฉบับหรือหลักฐานไม่ถูกต้อง');
 }
 function date(value,message) {string(value,message,true);if(!Number.isFinite(Date.parse(value)))throw new Error(message);}
+function nativeIndex(value) {if(!Number.isSafeInteger(value) || value<0)throw new Error('ตำแหน่งตารางแม่แบบไม่ถูกต้อง');}
+function validateNativeTemplate(native) {
+  record(native,'ข้อมูลแม่แบบต้นฉบับไม่ถูกต้อง');
+  for(const key of ['tableIndex','headerRow'])if(has(native,key))nativeIndex(native[key]);
+  if(has(native,'rebuildTable') && typeof native.rebuildTable!=='boolean')throw new Error('รูปแบบสร้างตารางแม่แบบไม่ถูกต้อง');
+  const sourceTables=array(native,'sourceTables','รายการตารางแม่แบบไม่ถูกต้อง');
+  if(has(native,'sourceTables') && !sourceTables.length)throw new Error('รายการตารางแม่แบบต้องมีอย่างน้อยหนึ่งตาราง');
+  const targets=new Set();
+  for(const target of sourceTables){
+    record(target,'รายการตารางแม่แบบไม่ถูกต้อง');nativeIndex(target.tableIndex);nativeIndex(target.headerRow);
+    if(targets.has(target.tableIndex))throw new Error('ตารางแม่แบบที่เลือกซ้ำ');targets.add(target.tableIndex);
+  }
+  if(!has(native,'sourceTables') && has(native,'tableIndex') && has(native,'headerRow'))targets.add(native.tableIndex);
+  const excluded=array(native,'excludedTables','รายการตารางแม่แบบที่ละไว้ไม่ถูกต้อง');
+  for(const index of excluded)nativeIndex(index);
+  if(new Set(excluded).size!==excluded.length || excluded.some(index=>targets.has(index)))throw new Error('ตารางแม่แบบซ้ำหรือถูกเลือกและละไว้พร้อมกัน');
+}
+function validateIdentityMetadata(project) {
+  strings(project,['id','domain','torFilename','sourceType'],'ข้อความระบุโครงการไม่ถูกต้อง');
+  if(has(project,'mode') && !['manual','auto'].includes(project.mode))throw new Error('โหมดโครงการไม่ถูกต้อง');
+  for(const offering of project.products){
+    strings(offering,['name','brand','model','provider','endpoints','bandwidth'],'ข้อความระบุรายการสินค้า/บริการไม่ถูกต้อง');
+    if(has(offering,'kind') && !['product','service'].includes(offering.kind))throw new Error('ประเภทสินค้า/บริการไม่ถูกต้อง');
+  }
+  for(const document of project.docs)strings(document,['name'],'ข้อความระบุเอกสารไม่ถูกต้อง');
+  record(project.rows,'โครงสร้างคำตอบไม่ถูกต้อง');
+  for(const [id,row] of Object.entries(project.rows)){
+    record(row,'โครงสร้างคำตอบไม่ถูกต้อง');
+    if(has(row,'requirementId') && row.requirementId!==id)throw new Error('คำตอบไม่ตรงกับเลขข้อ TOR');
+    if(has(row,'mode') && ![null,'manual','auto'].includes(row.mode))throw new Error('โหมดคำตอบไม่ถูกต้อง');
+    if(has(row,'scope') && ![null,'offering','bidder'].includes(row.scope))throw new Error('ขอบเขตคำตอบไม่ถูกต้อง');
+  }
+  if(!has(project,'template') || project.template===null)return;
+  const template=project.template;record(template,'แม่แบบส่งออกไม่ถูกต้อง');
+  strings(template,['name'],'ชื่อแม่แบบไม่ถูกต้อง');
+  if(has(template,'format') && !['docx','xlsx','pdf'].includes(template.format))throw new Error('รูปแบบแม่แบบไม่ถูกต้อง');
+  for(const notice of array(template,'notices','ข้อความแม่แบบไม่ถูกต้อง'))string(notice,'ข้อความแม่แบบไม่ถูกต้อง');
+  if(has(template,'native'))validateNativeTemplate(template.native);
+  if(!has(template,'profile'))return;
+  record(template.profile,'รูปแบบแม่แบบไม่ถูกต้อง');
+  const profile=template.profile;
+  strings(profile,['font','heading','headerText','footerText','banner','headerFill','headerColor','borderColor'],'ข้อความหรือสีแม่แบบไม่ถูกต้อง');
+  for(const key of ['fontSize','pageWidth','pageHeight','margin','bannerRatio'])if(has(profile,key) && !Number.isFinite(profile[key]))throw new Error('ขนาดแม่แบบไม่ถูกต้อง');
+  if(has(profile,'columns')){
+    if(!Array.isArray(profile.columns) || profile.columns.length<2 || profile.columns.length>12)throw new Error('คอลัมน์แม่แบบต้องมี 2–12 คอลัมน์');
+    for(const column of profile.columns){
+      record(column,'คอลัมน์แม่แบบไม่ถูกต้อง');
+      string(column.heading,'หัวคอลัมน์แม่แบบไม่ถูกต้อง',true);
+      if(typeof column.field!=='string' || !has(FIELDS,column.field))throw new Error('ข้อมูลคอลัมน์แม่แบบไม่ถูกต้อง');
+    }
+  }
+  try{validateProfile(profileFor(project));}catch{throw new Error('รูปแบบหรือคอลัมน์แม่แบบไม่ถูกต้อง');}
+}
 function validateSourceMetadata(project) {
   const count=project.sourcePageCount;
   if(has(project,'sourcePageCount') && count!==null)sourcePage(count,null);
@@ -99,6 +153,7 @@ export function validateManifest(data) {
     if (ids.some(id => typeof id !== 'string' || !id.trim() || id.length>120 || /[\u0000-\u001f]/u.test(id) || ['__proto__','constructor','prototype'].includes(id)) || new Set(ids).size !== ids.length) throw new Error('รหัสข้อมูลซ้ำหรือไม่ถูกต้อง');
   }
   for (const req of p.requirements) if (typeof req.textSnapshot !== 'string' || req.textSnapshot.length > 100000) throw new Error('ข้อความ TOR ไม่ถูกต้อง');
+  validateIdentityMetadata(p);
   const sourceCoveragePending=validateSourceMetadata(p);
   if(Object.keys(p.rows).length!==p.requirements.length||p.requirements.some(req=>!Object.hasOwn(p.rows,req.id)))throw new Error('คำตอบไม่ตรงกับเลขข้อ TOR');
   for (const d of p.docs) if (!['product','service','bidder'].includes(d.role) || !Number.isInteger(d.pageCount) || d.pageCount < 1 || !Array.isArray(d.itemIds) || d.itemIds.some(id=>!p.products.some(i=>i.id===id))) throw new Error('ประเภทหรือการผูกไฟล์หลักฐานไม่ถูกต้อง');

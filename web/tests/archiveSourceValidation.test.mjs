@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {validateManifest,remapProject} from '../src/lib/archiveModel.mjs';
 import {exportProblems,STATUS} from '../src/lib/projectModel.mjs';
+import {DEFAULT_PROFILE,profileFor,tableRows} from '../src/lib/tableModel.mjs';
 
 const fixture=()=>({format:'tor-comply-project',version:1,project:{
  id:'p',name:'Synthetic source validation',schemaVersion:4,sourceReviewPolicy:2,torDocId:'t',sourcePageCount:2,
@@ -103,4 +104,58 @@ test('page readings preserve original/accepted text and reject invalid, oversize
   const bad=fixture();bad.project.sourceReadings=records;assert.throws(()=>validateManifest(bad),/ข้อความ|ต้นฉบับ|หน้า/);
  }
  const legacy=fixture();assert.doesNotThrow(()=>validateManifest(legacy));
+});
+test('present project, offering and document identity labels reject non-string React children',()=>{
+ for(const value of [{bad:true},[],7,null,false]){
+  for(const field of ['domain','torFilename']){const f=fixture();f.project[field]=value;assert.throws(()=>validateManifest(f),/ข้อความ|โครงการ/);}
+  for(const field of ['name','brand','model','provider','endpoints','bandwidth']){const f=fixture();f.project.products[0][field]=value;assert.throws(()=>validateManifest(f),/ข้อความ|รายการ/);}
+  const f=fixture();f.project.docs[0].name=value;assert.throws(()=>validateManifest(f),/ข้อความ|เอกสาร/);
+ }
+});
+test('unsupported offering kinds, project/row modes and clause scopes are rejected',()=>{
+ for(const kind of ['unknown',null,7]){const f=fixture();f.project.products[0].kind=kind;assert.throws(()=>validateManifest(f),/ประเภท|รายการ/);}
+ for(const mode of ['unknown',null,7]){const f=fixture();f.project.mode=mode;assert.throws(()=>validateManifest(f),/โหมด/);}
+ for(const mode of ['unknown','',7]){const f=fixture();f.project.rows['1'].mode=mode;assert.throws(()=>validateManifest(f),/โหมด/);}
+ for(const scope of ['unknown',{},7]){const f=fixture();f.project.rows['1'].scope=scope;assert.throws(()=>validateManifest(f),/ขอบเขต/);}
+ const mismatched=fixture();mismatched.project.rows['1'].requirementId='different';assert.throws(()=>validateManifest(mismatched),/คำตอบ|เลขข้อ/);
+});
+test('custom template column mappings reject malformed arrays, columns and inherited field names',()=>{
+ for(const columns of ['bad',{},null,[null],[{heading:'TOR',field:'requirement',width:30},{heading:7,field:'proposal',width:30}],[...DEFAULT_PROFILE.columns,{heading:'bad',field:'constructor',width:10}]]){
+  const f=fixture();f.project.template={name:'QA',profile:{columns}};assert.throws(()=>validateManifest(f),/แม่แบบ|คอลัมน์/);
+ }
+ for(const profile of ['bad',[],null]){const f=fixture();f.project.template={profile};assert.throws(()=>validateManifest(f),/แม่แบบ/);}
+});
+test('custom profiles validate styles and primitive text before template preview/export',()=>{
+ for(const patch of [{font:{}},{heading:{}},{banner:[]},{headerFill:7},{pageWidth:'842'},{fontSize:NaN},{margin:null}]){
+  const f=fixture();f.project.template={profile:{...structuredClone(DEFAULT_PROFILE),...patch}};assert.throws(()=>validateManifest(f),/แม่แบบ|คอลัมน์/);
+ }
+ for(const template of ['bad',{name:{}},{notices:'bad'},{notices:[{}]},{format:'unknown'}]){
+  const f=fixture();f.project.template=template;assert.throws(()=>validateManifest(f),/แม่แบบ/);
+ }
+});
+test('missing legacy identity labels, modes and template styles remain compatible with defaults',()=>{
+ const f=fixture();delete f.project.products[0].name;delete f.project.products[0].kind;delete f.project.docs[0].name;
+ f.project.rows['1'].mode=null;f.project.rows['1'].scope=null;f.project.template={profile:{}};
+ const p=validateManifest(f);assert.equal(p.products[0].kind,'product');assert.equal(p.mode,'manual');
+ assert.doesNotThrow(()=>tableRows(p));assert.deepEqual(profileFor(p).columns,DEFAULT_PROFILE.columns);
+ const partial=fixture();partial.project.template={profile:{fontSize:12,headerFill:'FF0038'}};
+ assert.equal(profileFor(validateManifest(partial)).fontSize,12);
+});
+test('present native template metadata requires valid record, indexes and rebuild flags',()=>{
+ for(const native of ['bad',[],null,{tableIndex:-1},{tableIndex:1.5},{tableIndex:'0'},{headerRow:-1},{headerRow:null},{rebuildTable:'true'},{rebuildTable:null}]){
+  const f=fixture();f.project.template={format:'docx',profile:{},native};assert.throws(()=>validateManifest(f),/แม่แบบ|ตาราง/);
+ }
+});
+test('native source/excluded table collections reject empty, malformed, duplicate or overlapping targets',()=>{
+ for(const native of [{sourceTables:[]},{sourceTables:'bad'},{sourceTables:[null]},{sourceTables:[{tableIndex:0}]},{sourceTables:[{tableIndex:0,headerRow:'1'}]},{sourceTables:[{tableIndex:0,headerRow:0},{tableIndex:0,headerRow:1}]},{excludedTables:'bad'},{excludedTables:[-1]},{excludedTables:[1.5]},{excludedTables:[0,0]},{tableIndex:0,headerRow:0,excludedTables:[0]}]){
+  const f=fixture();f.project.template={format:'docx',profile:{},native};assert.throws(()=>validateManifest(f),/แม่แบบ|ตาราง/);
+ }
+});
+test('missing and empty legacy native metadata remain compatible and valid native targets survive remapping',()=>{
+ for(const native of [undefined,{}, {tableIndex:0}]){
+  const f=fixture();f.project.template={format:'docx',profile:{},...(native===undefined?{}:{native})};assert.doesNotThrow(()=>validateManifest(f));
+ }
+ const f=fixture();f.project.template={id:'t',format:'docx',profile:{},native:{tableIndex:0,headerRow:1,sourceTables:[{tableIndex:0,headerRow:1},{tableIndex:2,headerRow:0}],excludedTables:[1],rebuildTable:false}};
+ const p=validateManifest(f);let serial=0;const restored=remapProject(p,()=>`native-${++serial}`).project;
+ assert.deepEqual(restored.template.native,f.project.template.native);assert.equal(restored.template.id,restored.torDocId);
 });
