@@ -2,7 +2,7 @@ import {allowedOpenAiModel,recommendedModels,pickSystemOneModel} from './aiModel
 import {validateDraft,validateSemantic} from './aiIntegrity.mjs';
 const MAX_BODY=3*1024*1024;
 const HEADERS={'Cache-Control':'no-store, max-age=0','Pragma':'no-cache','Vary':'Origin','X-Content-Type-Options':'nosniff'};
-const fail=(message,status=400)=>{const error=new Error(message);error.safe=true;error.status=status;throw error;};
+const fail=(message,status=400,errorCode)=>{const error=new Error(message);error.safe=true;error.status=status;error.errorCode=errorCode;throw error;};
 const reply=(body,status=200)=>Response.json(body,{status,headers:HEADERS});
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const text=(value,max)=>typeof value==='string'&&value.trim().length>0&&value.length<=max;
@@ -90,8 +90,15 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
     const upstream=await fetchImpl(endpoint,{method:payload?'POST':'GET',headers:{Authorization:authorization,'Content-Type':'application/json'},...(payload?{body:JSON.stringify(payload)}:{}),cache:'no-store',redirect:'error',signal:controller.signal});
     if(!upstream.ok) {
       const status=upstream.status;
-      await upstream.body?.cancel();
-      fail(status===401?'API Key ไม่ถูกต้องหรือถูกยกเลิก':status===403?'คีย์นี้ไม่มีสิทธิ์เรียกโมเดล/รายการ':status===429?'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':status===400?'ผู้ให้บริการไม่รับคำขอ/โมเดลนี้ ตรวจสิทธิ์หรือเปลี่ยนโมเดล':'ผู้ให้บริการยังไม่พร้อม ลองใหม่ภายหลัง',[400,401,403,429].includes(status)?status:502);
+      let errorCode;
+      try {
+        const diagnostic=await readJson(upstream,65536);
+        const code=diagnostic?.error?.code||diagnostic?.error?.type;
+        if(['insufficient_quota','billing_hard_limit_reached','rate_limit_exceeded'].includes(code))errorCode=code;
+      }catch{/* Provider details are deliberately discarded. */}
+      fail(status===401?'API Key ไม่ถูกต้องหรือถูกยกเลิก':status===403?'คีย์นี้ไม่มีสิทธิ์เรียกโมเดล/รายการ':status===429?
+        ['insufficient_quota','billing_hard_limit_reached'].includes(errorCode)?'บัญชี API ไม่มีเครดิตหรือถึงวงเงินแล้ว ตรวจ Billing/Usage ของบัญชี':'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':
+        status===400?'ผู้ให้บริการไม่รับคำขอ/โมเดลนี้ ตรวจสิทธิ์หรือเปลี่ยนโมเดล':'ผู้ให้บริการยังไม่พร้อม ลองใหม่ภายหลัง',[400,401,403,429].includes(status)?status:502,errorCode);
     }
     let raw;
     try{raw=await readJson(upstream,1024*1024);}catch{fail('ผู้ให้บริการคืนข้อมูลที่อ่านไม่ได้',502);}
@@ -110,6 +117,6 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
     try{result=validateSemantic(raw,context.candidates);}catch{fail('ผล TypeSafe ไม่ครบหรือไม่ตรงรูปแบบ',502);}
     return reply(result);
   } catch(error) {
-    return reply({error:error.safe?error.message:error.name==='AbortError'?'คำขอถูกยกเลิกหรือหมดเวลา ลองลดข้อมูล':'เชื่อมต่อผู้ให้บริการไม่สำเร็จ'},error.safe?error.status:error.name==='AbortError'?504:502);
+    return reply({error:error.safe?error.message:error.name==='AbortError'?'คำขอถูกยกเลิกหรือหมดเวลา ลองลดข้อมูล':'เชื่อมต่อผู้ให้บริการไม่สำเร็จ',...(error.safe&&error.errorCode?{errorCode:error.errorCode}:{})},error.safe?error.status:error.name==='AbortError'?504:502);
   } finally {clearTimeout(timer);request.signal.removeEventListener('abort',abort);}
 }

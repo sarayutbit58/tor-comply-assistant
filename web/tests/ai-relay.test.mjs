@@ -91,3 +91,11 @@ test('successful provider objects cannot forward unexpected credential metadata'
  const draft=await relay.handleAiRequest(request(draftInput),async()=>Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}]}));
  assert.equal((await draft.text()).includes(secret),false);
 });
+
+test('known billing-quota code is distinguished from rate limiting without provider messages',async()=>{
+ const response=await relay.handleAiRequest(request({provider:'openai',action:'models'}),async()=>Response.json({error:{code:'insufficient_quota',message:secret}},{status:429}));
+ const body=await response.json();
+ assert.equal(body.errorCode,'insufficient_quota');
+ assert.match(body.error,/เครดิต|วงเงิน/);
+ assert.equal(JSON.stringify(body).includes(secret),false);
+});
