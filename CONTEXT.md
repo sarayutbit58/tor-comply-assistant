@@ -2,7 +2,7 @@
 
 Audience: coding agents and maintainers. Read this for the code map; use [the approved scope](docs/enhancement-scope.md) for product decisions.
 
-Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified through `5c9b182`; see the dated QA record for tested boundaries. Paths below are relative to the repository root.
+Last updated: 2026-09-30 (Asia/Bangkok). Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`. See dated QA records for tested boundaries. Paths below are relative to the repository root.
 
 ## 1. Overview and quick reference
 
@@ -28,7 +28,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-30 | Added agent entry instructions and architectural handoff; expanded approved requirements from the user interview | `AGENTS.md`, `CONTEXT.md`, `docs/enhancement-scope.md`, README pointer |
 | 2026-09-30 | One Comply source file now supplies selected TOR/number columns and the template; preview, text-only PDF table geometry, DOCX/XLSX table mapping, shared-file protection | `complyIntake.mjs`, `complyBrowser.js`, `pdfTableGrid.mjs`, `ComplyIntakePreview.jsx`, `HomeClient.jsx`; [intake QA](docs/qa-2026-09-30-intake.md) |
 | 2026-09-30 | Debugged narrow PDF columns/header bands, boundary-form precision, nested/unselected DOCX tables and batch evidence focus; verified three formats, source retention and archive restore | 51 Node tests plus scoped browser/artifact checks; see intake QA |
-| 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); verification is recorded separately for this change |
+| 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); [API QA](docs/qa-2026-09-30-ai.md): 71 tests, cloud/browser checks, live Jev; OpenAI credit_balance_exhausted |
 
 The intake production code through `5c9b182` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
