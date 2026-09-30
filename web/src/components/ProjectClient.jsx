@@ -34,10 +34,12 @@ export function ProjectClient({projectId}){
   const [box,setBox]=useState(null),[quote,setQuote]=useState(''),[quoteMethod,setQuoteMethod]=useState('text'),[quoteReviewed,setQuoteReviewed]=useState(false),[printedPage,setPrintedPage]=useState(''),[selectedMark,setSelectedMark]=useState(null);
   const [ocrPage,setOcrPage]=useState(1),[ocrDraft,setOcrDraft]=useState(''),[ocrDraftPage,setOcrDraftPage]=useState(null);
   const pendingReference=useRef(null);
+  const activeRequirement=useRef(null);
   useEffect(()=>setMounted(true),[]);
   useEffect(()=>{const fail=()=>{setMessage('พื้นที่เก็บข้อมูลเต็มหรือถูกปิด ส่งออกโครงการเพื่อสำรองงาน');setError(true);};window.addEventListener('tor-storage-error',fail);return()=>window.removeEventListener('tor-storage-error',fail);},[]);
   const reqId=project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id;
   const requirement=project?.requirements.find(r=>r.id===reqId);
+  useEffect(()=>{activeRequirement.current=reqId;},[reqId]);
   const marks=useMemo(()=>project&&reqId?evidenceFor(project,reqId):[],[project?.evidence,reqId]);
   const doc=project?.docs.find(d=>d.id===view.docId);
   const selectedEvidence=project?.evidence.find(m=>m.id===selectedMark);
@@ -88,7 +90,7 @@ export function ProjectClient({projectId}){
       const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);
       const {assessment,candidates,proposal}=await assessClause(snapshot,id,readIndexed);
       actions.applyAssessment(projectId,id,assessment,candidates,proposal);
-      const first=evidenceFor(useProjectStore.getState().projects.find(p=>p.id===projectId),id)[0];if(first&&id===reqId)openMark(first);
+      const first=evidenceFor(useProjectStore.getState().projects.find(p=>p.id===projectId),id)[0];if(first&&id===activeRequirement.current)openMark(first);
     },'ประเมินแล้ว · ตรวจเหตุผลและหลักฐานของแต่ละเงื่อนไข');
   }
   async function assessAll(){
@@ -103,6 +105,8 @@ export function ProjectClient({projectId}){
         await new Promise(resolve=>setTimeout(resolve,0));
       }
       if(!count)throw new Error('ยังไม่มีข้อที่เลือกโหมด Auto และสินค้า/บริการไว้');
+      const latest=useProjectStore.getState().projects.find(p=>p.id===projectId);
+      const first=evidenceFor(latest,activeRequirement.current)[0];if(first)openMark(first);
     },'ประเมินข้อที่ใช้ Auto แล้ว ข้อที่ยังไม่มีหลักฐานคงสถานะรอตรวจ');
   }
   async function ocrSelection(){
