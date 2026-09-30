@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {extractComplyRequirements,pdfTableRows} from '../src/lib/complyIntake.mjs';
+import {extractComplyRequirements,pdfTableRows,isComplyTable} from '../src/lib/complyIntake.mjs';
 const table=(rows,headers=['เลขข้อ','รายละเอียดตาม TOR','รายละเอียดที่เสนอ','ผล','อ้างอิง'])=>({id:'docx:0',format:'docx',tableIndex:0,headers,headerRow:0,rows:rows.map((cells,i)=>({cells,row:i+2,page:null}))});
 test('filled or empty answer columns yield identical requirements and no old answers',()=>{
   const filled=table([['5.1','รองรับ IPv6','OLD_PROPOSAL','Comply','old.pdf'],['5.2','มี 24 พอร์ต','','','']]);
@@ -48,4 +48,9 @@ test('two compatible DOCX tables preserve their origin for native export',()=>{
   const second={...table([['5.2','MPLS','','','']]),id:'docx:1',tableIndex:1};
   const result=extractComplyRequirements([first,second],{numberColumn:0,textColumn:1});
   assert.deepEqual(result.requirements.map(r=>r.sourceTableIndex),[0,1]);
+});
+test('unselected short-header comply tables are recognized for removal from native output',()=>{
+  const t=table([['5.9','Support IPv6','OLD_PASS']],['ข้อ','TOR','เสนอ','ผล','อ้างอิง']);
+  assert.equal(isComplyTable(t),true);
+  assert.equal(isComplyTable({headers:['Company','Address'],rows:[{cells:['1234567890123','QA Address']}]}),false);
 });

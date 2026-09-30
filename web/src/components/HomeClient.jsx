@@ -8,6 +8,7 @@ import {parsePages} from '@/lib/torModel.mjs';
 import {deleteFile,putFile} from '@/lib/localFiles';
 import {projectFileIds} from '@/lib/projectModel.mjs';
 import {DEFAULT_PROFILE,validateProfile} from '@/lib/tableModel.mjs';
+import {isComplyTable} from '@/lib/complyIntake.mjs';
 export function HomeClient() {
   const router=useRouter();
   const projects=useProjectStore(s=>s.projects);
@@ -41,7 +42,7 @@ export function HomeClient() {
         for(const field of ['proposal','comparison','references'])if(!columns.some(c=>c.field===field))columns.push(structuredClone(DEFAULT_PROFILE.columns.find(c=>c.field===field)));
         const profile={...base.profile,columns};validateProfile(profile);
         const selectedTables=selection.selected.map(t=>({tableIndex:t.tableIndex,headerRow:t.headerRow}));
-        const excludedTables=prepared.tables.filter(t=>t.score>=2&&!selection.selected.some(s=>s.id===t.id)).map(t=>t.tableIndex).filter(Number.isInteger);
+        const excludedTables=prepared.tables.filter(t=>isComplyTable(t)&&!selection.selected.some(s=>s.id===t.id)).map(t=>t.tableIndex).filter(Number.isInteger);
         template={...base,name:file.name,profile,native:{...base.native,sourceTables:prepared.format==='docx'?selectedTables:undefined,excludedTables,rebuildTable:base.native?.rebuildTable||columns.length!==selection.main.headers.length}};
         requirements=selection.requirements;pages=prepared.pages;
         sourceTable={tableIds:selection.selected.map(t=>t.id),numberColumn:selection.mapping.numberColumn,textColumn:selection.mapping.textColumn,headers:selection.main.headers};

@@ -3,7 +3,7 @@ import {readOffice,nodes,attr,textOf} from './officeXml';
 import {guessField} from './tableModel.mjs';
 import {pdfTableRows,inferSourceMapping} from './complyIntake.mjs';
 const headerScore=cells=>new Set(cells.filter(Boolean).map((text,i)=>{
-  if(!/ลำดับ|เลขข้อ|รายละเอียด|ข้อกำหนด|ผู้เสนอ|อ้างอิง|เปรียบเทียบ|\bno\b|clause|requirement|propos|reference|result|compliance/i.test(text))return null;
+  if(!/ลำดับ|เลขข้อ|รายละเอียด|ข้อกำหนด|ผู้เสนอ|อ้างอิง|เปรียบเทียบ|^ข้อ$|^TOR$|^เสนอ$|^ผล$|\bno\b|clause|requirement|propos|reference|result|comparison|compliance/i.test(text))return null;
   return guessField(text,i);
 }).filter(Boolean)).size;
 function headerIndex(rows) {
@@ -63,7 +63,7 @@ function xlsxTable(office) {
   return {id:'xlsx:0',format:'xlsx',headers,score,headerRow:index,sheetPath,sheetName:sheetInfo?.getAttribute('name')||'Sheet 1',columnOffset:offset,rows:rows.slice(index+1).map(r=>({...r,cells:r.cells.slice(offset,offset+headers.length)}))};
 }
 function pdfHeaderItems(page) {
-  const anchors=page.items.filter(item=>/รายละเอียด|ข้อกำหนด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|requirement|propos|reference|result|clause/i.test(item.text)&&item.box[1]<.4);
+  const anchors=page.items.filter(item=>/รายละเอียด|ข้อกำหนด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|propos|reference|result|comparison|status|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
   if(anchors.length<2)return [];
   const y=Math.min(...anchors.map(a=>a.box[1]));
   return anchors.filter(a=>Math.abs(a.box[1]-y)<.065).sort((a,b)=>a.box[0]-b.box[0]);

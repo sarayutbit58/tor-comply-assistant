@@ -15,6 +15,11 @@ export function inferSourceMapping(headers) {
 export function compatibleTable(a,b) {
   return a.headers.length===b.headers.length&&a.headers.every((header,i)=>signature(header)===signature(b.headers[i]));
 }
+export function isComplyTable(table) {
+  const headers=table.headers.join(' ');
+  if(/\btor\b|requirement|ข้อกำหนด|รายละเอียดตาม|เปรียบเทียบ|อ้างอิง|compliance/i.test(headers))return true;
+  return table.rows.some(row=>row.cells.some(cell=>/^(?:ข้อ\s*)?[0-9๐-๙]{1,4}(?:\.[0-9๐-๙]+)*(?:[.)]?\s+\S.*)?$/u.test(clean(cell))));
+}
 export function extractComplyRequirements(tables,{numberColumn=null,textColumn}) {
   if(!Number.isInteger(textColumn)||textColumn<0)throw new Error('เลือกคอลัมน์ข้อกำหนด TOR');
   if(numberColumn!==null&&(!Number.isInteger(numberColumn)||numberColumn<0||numberColumn===textColumn))throw new Error('คอลัมน์เลขข้อและ TOR ต้องแยกกัน หรือเลือกเลขข้ออยู่ในข้อความ TOR');

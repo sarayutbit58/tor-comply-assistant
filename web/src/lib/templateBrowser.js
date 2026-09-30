@@ -12,7 +12,7 @@ export async function readTemplate(file,options={}) {
     const tables=nodes(doc,'tbl');
     const tableIndex=options.tableIndex??tables.findIndex(t=>nodes(t,'tr').some(row=>nodes(row,'tc').length>=2));
     if(tableIndex<0) throw new Error('แม่แบบ DOCX ต้องมีตาราง');
-    const table=tables[tableIndex],rows=nodes(table,'tr');
+    const table=tables[tableIndex],rows=[...table.children].filter(node=>node.localName==='tr');
     let headerRow=rows.findIndex(row=>/อ้างอิง|เสนอ|requirement|reference/i.test(textOf(row)));
     if(headerRow<0)headerRow=0;
     if(Number.isInteger(options.headerRow))headerRow=options.headerRow;
@@ -83,7 +83,7 @@ export async function readTemplate(file,options={}) {
     try {
       const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
       profile.pageWidth=vp.width;profile.pageHeight=vp.height;
-      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|proposal|reference|result|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
+      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|propos|reference|result|comparison|status|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
       if(anchors.length>=3){
         const y=Math.min(...anchors.map(a=>a.box[1]));
         const headerItems=anchors.filter(a=>Math.abs(a.box[1]-y)<.065).sort((a,b)=>a.box[0]-b.box[0]);
