@@ -30,6 +30,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-30 | Debugged narrow PDF columns/header bands, boundary-form precision, nested/unselected DOCX tables and batch evidence focus; verified three formats, source retention and archive restore | 51 Node tests plus scoped browser/artifact checks; see intake QA |
 | 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); [API QA](docs/qa-2026-09-30-ai.md): 71 tests, cloud/browser checks, live Jev; OpenAI credit_balance_exhausted |
 | 2026-09-30 | Added OpenRouter as an independently selected LLM/OCR provider, key-specific authentication, fresh capability-filtered catalogue and chat-completion adapter | [OpenRouter QA](docs/qa-2026-09-30-openrouter.md): 79 tests plus live default-model LLM/Thai page OCR; keys cleared, no session data in project archive |
+| 2026-09-30 | User delegated autonomous keyless complete-loop Copilot enhancement; created source checkpoint and acceptance/scenario plan | [Checkpoint](docs/checkpoint-2026-09-30.md), [active plan](docs/autonomous-copilot-plan.md); implementation/verification ongoing |
 
 The intake production code through `5c9b182` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
