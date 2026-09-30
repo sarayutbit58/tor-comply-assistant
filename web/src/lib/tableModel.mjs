@@ -11,9 +11,9 @@ export const DEFAULT_PROFILE = {
   pageWidth:842,pageHeight:595,margin:30,heading:'ตาราง Comply TOR',headerText:'',footerText:'',
 };
 export function guessField(heading,index) {
-  if (/ลำดับ|เลขข้อ|^ข้อ$/.test(heading)) return 'number';
+  if (/ลำดับ|เลขข้อ|^ข้อ$|^no[.]?$|clause(?:\s*no)?|^item(?:\s*no)?$/i.test(heading.trim())) return 'number';
   if (/อ้างอิง|reference/i.test(heading)) return 'references';
-  if (/เปรียบเทียบ|ผล|comply|compliance|result|status|comparison/i.test(heading)) return 'comparison';
+  if (/เปรียบเทียบ|^ผล$|ผล(?:การ)?(?:ประเมิน|ตรวจ|พิจารณา)|comply|compliance|result|status|comparison/i.test(heading)) return 'comparison';
   if (/เสนอ|offer|propos/i.test(heading)) return 'proposal';
   return index===0 || /กำหนด|รายละเอียด|requirement/i.test(heading) ? 'requirement' : 'proposal';
 }

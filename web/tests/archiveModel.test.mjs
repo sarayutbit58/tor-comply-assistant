@@ -19,3 +19,10 @@ test('maximum names and Thai clause labels survive repeated transfers',()=>{
   const p=validateManifest(f);let i=0;const clone=remapProject(p,()=>String(++i));
   assert.equal(clone.project.name.length,160);
 });
+test('the same source file used as TOR and template is transferred once and remapped together',()=>{
+  const f=fixture();f.project.template={id:'t',format:'docx',profile:{}};f.project.sourceType='comply-table';
+  const p=validateManifest(f);let i=0;const clone=remapProject(p,()=>String(++i));
+  assert.equal(clone.project.template.id,clone.project.torDocId);
+  assert.equal(clone.project.sourceType,'comply-table');
+  assert.equal(Object.keys(clone.mapping).length,2);
+});

@@ -2,19 +2,20 @@ import {DEFAULT_PROFILE,guessField,validateProfile} from './tableModel.mjs';
 import {readOffice,nodes,attr,textOf} from './officeXml';
 function columns(headers,widths) {return headers.map((heading,i)=>({heading:heading||'คอลัมน์ '+(i+1),field:guessField(heading,i),width:widths[i]||100/headers.length}));}
 function color(value,fallback) {return /^[a-f0-9]{6}$/i.test(value||'')?value.toUpperCase():fallback;}
-export async function readTemplate(file) {
+export async function readTemplate(file,options={}) {
   const format=file.name.split('.').pop().toLowerCase();
   const profile=structuredClone(DEFAULT_PROFILE);
   let native={}, notices=[];
   if(format==='docx') {
-    const {xml,archive}=await readOffice(file), doc=xml('word/document.xml');
+    const {xml,archive}=options.office||await readOffice(file), doc=xml('word/document.xml');
     if(!doc) throw new Error('ไม่พบเนื้อหา DOCX');
     const tables=nodes(doc,'tbl');
-    const tableIndex=tables.findIndex(t=>nodes(t,'tr').some(row=>nodes(row,'tc').length>=2));
+    const tableIndex=options.tableIndex??tables.findIndex(t=>nodes(t,'tr').some(row=>nodes(row,'tc').length>=2));
     if(tableIndex<0) throw new Error('แม่แบบ DOCX ต้องมีตาราง');
     const table=tables[tableIndex],rows=nodes(table,'tr');
     let headerRow=rows.findIndex(row=>/อ้างอิง|เสนอ|requirement|reference/i.test(textOf(row)));
     if(headerRow<0)headerRow=0;
+    if(Number.isInteger(options.headerRow))headerRow=options.headerRow;
     const cells=[...rows[headerRow].children].filter(n=>n.localName==='tc');
     const widths=nodes(table,'gridCol').map(n=>Number(attr(n,'w')));
     profile.columns=columns(cells.map(textOf),widths.length===cells.length?widths:[]);
@@ -49,15 +50,20 @@ export async function readTemplate(file) {
     native={tableIndex,headerRow};
     notices.push('DOCX จะรักษาตาราง หัว–ท้ายหน้า และรูปภาพในแม่แบบเดิม; ตรวจข้อความส่วนหัวก่อนส่งออก');
   } else if(format==='xlsx') {
-    const {xml}=await readOffice(file), sheet=xml('xl/worksheets/sheet1.xml'), styles=xml('xl/styles.xml'), shared=xml('xl/sharedStrings.xml');
+    const {xml}=options.office||await readOffice(file), sheet=xml(options.sheetPath||'xl/worksheets/sheet1.xml'), styles=xml('xl/styles.xml'), shared=xml('xl/sharedStrings.xml');
     if(!sheet)throw new Error('ไม่พบแผ่นงานแรกใน XLSX');
     const strings=shared?nodes(shared,'si').map(textOf):[];
     const rows=nodes(sheet,'row');
     const cellText=cell=>cell.getAttribute('t')==='s'?strings[Number(nodes(cell,'v')[0]?.textContent)]||'':cell.getAttribute('t')==='inlineStr'?textOf(cell):nodes(cell,'v')[0]?.textContent||'';
-    let row=rows.find(r=>/อ้างอิง|เสนอ|requirement|reference/i.test(nodes(r,'c').map(cellText).join(' ')))||rows.find(r=>nodes(r,'c').length>=2);
+    let row=options.xlsxTable?rows[options.xlsxTable.headerRow]:rows.find(r=>/อ้างอิง|เสนอ|requirement|reference/i.test(nodes(r,'c').map(cellText).join(' ')))||rows.find(r=>nodes(r,'c').length>=2);
     if(!row)throw new Error('ไม่พบหัวตารางในแผ่นงานแรก');
     const cells=nodes(row,'c'), widths=nodes(sheet,'col').map(n=>Number(n.getAttribute('width')));
     profile.columns=columns(cells.map(cellText),widths);
+    if(options.xlsxTable)profile.columns=columns(options.xlsxTable.headers,options.xlsxTable.headers.map((_,i)=>{
+      const physical=i+options.xlsxTable.columnOffset+1;
+      const col=nodes(sheet,'col').find(n=>Number(n.getAttribute('min'))<=physical&&Number(n.getAttribute('max'))>=physical);
+      return Number(col?.getAttribute('width'))||20;
+    }));
     if(styles){
       const xfs=nodes(styles,'cellXfs')[0]?.children;
       const xf=xfs?.[Number(cells[0].getAttribute('s')||0)];
@@ -72,12 +78,12 @@ export async function readTemplate(file) {
   } else if(format==='pdf') {
     profile.headerFill='FFFFFF';profile.headerColor='262629';profile.borderColor='777777';
     const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
-    const pages=await extractPdf(file,1), first=pages[0];
+    const pages=options.pdfPages||await extractPdf(file,1), first=pages[0];
     const pdf=await loadPdf(file);
     try {
       const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
       profile.pageWidth=vp.width;profile.pageHeight=vp.height;
-      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|requirement|proposal|reference|result/i.test(item.text)&&item.box[1]<.4);
+      const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|proposal|reference|result|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
       if(anchors.length>=3){
         const y=Math.min(...anchors.map(a=>a.box[1]));
         const headerItems=anchors.filter(a=>Math.abs(a.box[1]-y)<.065).sort((a,b)=>a.box[0]-b.box[0]);
@@ -111,6 +117,13 @@ export async function readTemplate(file) {
     } finally {await pdf.destroy();}
     notices.push('PDF ใช้ขนาดหน้าและส่วนหัวจากต้นฉบับ แล้วจัดตารางใหม่; ตำแหน่งอาจต่างจากแม่แบบ');
   } else throw new Error('แม่แบบรองรับ DOCX, PDF หรือ XLSX');
-  validateProfile(profile);
+  if(options.intake) {
+    const originalCount=profile.columns.length;
+    for(const field of ['proposal','comparison','references'])if(!profile.columns.some(c=>c.field===field))profile.columns.push(structuredClone(DEFAULT_PROFILE.columns.find(c=>c.field===field)));
+    if(profile.columns.length!==originalCount){native.rebuildTable=true;notices.push('เพิ่มคอลัมน์คำตอบ/ผล/อ้างอิงที่ไม่มีในต้นฉบับ การส่งออกจะจัดตารางใหม่ตามรูปแบบหลัก');}
+    // The user confirms the source TOR column in the intake preview.
+    if(!profile.columns.some(c=>c.field==='requirement'))profile.columns[Math.min(1,originalCount-1)].field='requirement';
+  }
+  if(!options.sourceRead)validateProfile(profile);
   return {format,profile,native,notices};
 }

@@ -23,7 +23,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
         const template=await readTemplate(file),id=crypto.randomUUID();
         await putFile(id,file);
         try{actions.settings(project.id,{template:{...template,id,name:file.name}});}catch(error){await deleteFile(id);throw error;}
-        if(project.template?.id)await deleteFile(project.template.id);
+        if(project.template?.id&&project.template.id!==project.torDocId)await deleteFile(project.template.id);
         form.reset();onTemplate();return;
       }
       if(!/\.pdf$/i.test(file.name))throw new Error('เอกสารหลักฐานใช้ PDF เพื่อเก็บหน้าและตำแหน่งไฮไลต์');
@@ -56,7 +56,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
       <button className="brand-button" disabled={busy||!role}>{busy?'กำลังอ่านไฟล์…':'เพิ่มไฟล์ตามประเภทที่เลือก'}</button>
     </form>
     <div className="file-inventory">
-      <div><span className="file-role">TOR</span><span>{project.torFilename||'กรอกข้อ TOR เอง'}</span></div>
+      <div><span className="file-role">{project.sourceType==='comply-table'?'ตารางต้นฉบับ':'TOR'}</span><span>{project.torFilename||'กรอกข้อ TOR เอง'}</span></div>
       {project.template&&<div><span className="file-role">แม่แบบ</span><span>{project.template.name}</span><button className="text-button" onClick={onTemplate}>ตั้งค่า</button></div>}
       {project.docs.map(doc=><div key={doc.id}><span className="file-role">{FILE_ROLES[doc.role]}</span><span>{doc.name}<small>{doc.pageCount} หน้า · {doc.itemIds.map(id=>project.products.find(i=>i.id===id)?.name).filter(Boolean).join(', ')||'ทั้งโครงการ'}</small></span><button className="text-button" onClick={()=>run(async()=>{const entry=await getFile(doc.id);if(!entry)throw new Error('ไม่พบต้นฉบับ');downloadBlob(entry.blob,doc.name);})}>ต้นฉบับ</button><button className="text-button danger" onClick={()=>{if(window.confirm('ลบเอกสารและไฮไลต์ที่เกี่ยวข้อง?'))run(async()=>{actions.removeDocument(project.id,doc.id);await deleteFile(doc.id);},'ลบเอกสารแล้ว');}}>ลบ</button></div>)}
     </div>

@@ -14,10 +14,10 @@ export const useProjectStore = create()(persist((set, get) => {
   const edit = (id, transform) => set(state => ({ projects: state.projects.map(p => p.id === id ? { ...transform(p), updatedAt: new Date().toISOString() } : p) }));
   return {
     projects: [],
-    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet' }) {
+    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet', template = null, sourceType = 'tor', sourceTable = null }) {
       const id = newId();
       const distinct = uniqueRequirements(requirements);
-      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, rows: {} });
+      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, template, sourceType, sourceTable, rows: {} });
       set(state => ({ projects: [project, ...state.projects] }));
       return id;
     },
