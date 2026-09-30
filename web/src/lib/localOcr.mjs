@@ -1,3 +1,7 @@
+export function ocrProgressMessage({status,progress}={}) {
+ const percent=Math.round(Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0))*100);
+ return (status==='recognizing text'?'อ่านข้อความ':status==='loading language traineddata'?'เตรียมภาษาไทย/อังกฤษ':'เตรียมเครื่องมืออ่านภาพ')+' '+percent+'%';
+}
 export async function recognizeLocal(image,{factory,assertCurrent=()=>{},subscribe=()=>()=>{},onProgress,timeoutMs=60000}={}) {
  if(typeof factory!=='function')throw new Error('ตัวอ่าน OCR ในเครื่องยังไม่พร้อม ใช้การถอดข้อความเองได้');
  let worker,terminated=false,cancelError,failCancellation;
@@ -11,7 +15,7 @@ export async function recognizeLocal(image,{factory,assertCurrent=()=>{},subscri
  const timer=setTimeout(()=>{cancelError=new Error('OCR ใช้เวลานานเกินไป ลองเลือกกรอบเล็กลงหรือถอดข้อความเอง');failCancellation(cancelError);terminate().catch(()=>{});},timeoutMs);
  try {
   check();
-  const initialization=Promise.resolve(factory(['tha','eng'],1,{langPath:'/ocr-data',gzip:false,cacheMethod:'readOnly',logger:progress=>onProgress?.({status:progress.status,progress:progress.progress})})).then(async value=>{worker=value;if(cancelError)await terminate();return value;});
+  const initialization=Promise.resolve(factory(['tha','eng'],1,{langPath:'/ocr-data',gzip:false,cacheMethod:'readOnly',logger:progress=>{if(!cancelError&&!terminated)onProgress?.({status:progress.status,progress:progress.progress});}})).then(async value=>{worker=value;if(cancelError)await terminate();return value;});
   await Promise.race([initialization,cancellation]);
   check();
   const result=await Promise.race([worker.recognize(image),cancellation]);

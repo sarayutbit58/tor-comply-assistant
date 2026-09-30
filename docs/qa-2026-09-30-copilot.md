@@ -54,6 +54,8 @@ Actual PDF/DOCX/XLSX/annotated PDF/archive generation and local scan OCR are sti
 - Added reachable OCR cancel controls inside source/repair dialogs and raw-versus-accepted page transcription records, retained through archives; cloud/local short OCR heading-prefix correction now matches.
 - Reproduced and fixed malformed archive metadata crashes (nonstring quotes and wrong source-array shapes). Present fields are validated before staging; absent legacy optional fields remain supported. New shape/source-reading tests observed red, then green. Fresh full suite result to be recorded after these changes.
 
+- Real source-dialog cancellation preserved the deliberately seeded draft and returned controls to ready with a cancellation message. A late worker progress message appeared afterward; reproduced with a failing lifecycle test, then guarded cancelled/terminated callbacks. Progress copy now describes Thai preparation/reading stages rather than internal engine API terminology.
+
 - Keyless does not mean offline startup. Browser OCR uses Tesseract/WASM and language resources; it runs one worker per explicit operation and allows manual transcription.
 - New source quotations always require human review. File role, selected offering scope and physical page/region still determine eligible proof.
 - Source repair keeps before/after text and source provenance; acceptance invalidates old verdicts. Editing a completed scan page reopens its page check.

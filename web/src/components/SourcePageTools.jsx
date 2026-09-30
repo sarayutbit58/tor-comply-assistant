@@ -6,6 +6,7 @@ import {parsePages} from '@/lib/torModel.mjs';
 import {compareReadings} from '@/lib/readingModel.mjs';
 import {getFile} from '@/lib/localFiles';
 import {aiSession} from '@/lib/aiSession.mjs';
+import {ocrProgressMessage} from '@/lib/localOcr.mjs';
 const PdfStage=dynamic(()=>import('./PdfStage'),{ssr:false});
 export function SourcePageTools({project,count,run,busy,onAdded,onPage}) {
  const [page,setPage]=useState(project.unreadablePages[0]||1),[draft,setDraft]=useState(''),[method,setMethod]=useState('manual'),[progress,setProgress]=useState(''),[rawDraft,setRawDraft]=useState(''),[reading,setReading]=useState(false);
@@ -15,7 +16,7 @@ export function SourcePageTools({project,count,run,busy,onAdded,onPage}) {
   setReading(true);try{await run(async()=>{
    const ticket=local?aiSession.captureLocalOcr():aiSession.captureFor('ocr'),file=await getFile(capture.docId);if(!file)throw new Error('ไม่พบ TOR ต้นฉบับ');
    const [{ocrPdfPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
-   try{const result=await recognizeImage(await ocrPdfPage(file.blob,capture.page),ticket,{onProgress:p=>setProgress(p.status+' '+Math.round((p.progress||0)*100)+'%')});setDraft(result.text);setRawDraft(result.text);setMethod(ticket.provider==='local'?'local-ocr':'ocr');}finally{setProgress('');}
+   try{const result=await recognizeImage(await ocrPdfPage(file.blob,capture.page),ticket,{onProgress:p=>setProgress(ocrProgressMessage(p))});setDraft(result.text);setRawDraft(result.text);setMethod(ticket.provider==='local'?'local-ocr':'ocr');}finally{setProgress('');}
   },'อ่านแล้ว ตรวจเลขข้อและแก้ข้อความเทียบภาพก่อนเพิ่ม');}finally{setReading(false);}
  }
  return <section className="ocr-section stack-form"><h3>อ่านหน้า TOR / ถอดข้อความเอง</h3><p className="muted">หน้าที่ยังไม่ครบ: {project.unreadablePages.join(', ')||'ไม่มี'} · OCR ในเครื่องไม่ใช้ API Key และไม่ส่งภาพให้บริการ AI</p>

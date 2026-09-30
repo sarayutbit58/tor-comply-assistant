@@ -5,6 +5,7 @@ import {useProjectStore} from '@/store/projectStore';
 import {compareReadings,readingRisks,readingInBox} from '@/lib/readingModel.mjs';
 import {getFile} from '@/lib/localFiles';
 import {aiSession} from '@/lib/aiSession.mjs';
+import {ocrProgressMessage} from '@/lib/localOcr.mjs';
 const PdfStage=dynamic(()=>import('./PdfStage'),{ssr:false});
 export function ReadingRepair({project,requirement,run,busy,onAccepted}) {
  const [before]=useState(requirement.textSnapshot),[draft,setDraft]=useState(requirement.textSnapshot),[page,setPage]=useState(requirement.sourcePage||1),[box,setBox]=useState(requirement.sourceRegions?.find(r=>r.page===requirement.sourcePage)?.box||null),[confirmed,setConfirmed]=useState(false),[method,setMethod]=useState('manual'),[progress,setProgress]=useState(''),[reading,setReading]=useState(false);
@@ -21,7 +22,7 @@ export function ReadingRepair({project,requirement,run,busy,onAccepted}) {
     const canvas=document.createElement('canvas');await paintPage(handle,page,canvas,2);
     const bounds=box||[0,0,1,1],crop=document.createElement('canvas');crop.width=Math.max(1,Math.ceil(bounds[2]*canvas.width));crop.height=Math.max(1,Math.ceil(bounds[3]*canvas.height));
     crop.getContext('2d').drawImage(canvas,bounds[0]*canvas.width,bounds[1]*canvas.height,crop.width,crop.height,0,0,crop.width,crop.height);
-    const result=await recognizeImage(crop.toDataURL('image/png'),ticket,{onProgress:p=>setProgress(p.status+' '+Math.round((p.progress||0)*100)+'%')});
+    const result=await recognizeImage(crop.toDataURL('image/png'),ticket,{onProgress:p=>setProgress(ocrProgressMessage(p))});
     change(result.text);setMethod('local-ocr');
    }finally{setProgress('');await handle.destroy();}
   },'อ่านข้อความใหม่แล้ว ตรวจส่วนที่เปลี่ยนก่อนยอมรับ');}finally{setReading(false);}

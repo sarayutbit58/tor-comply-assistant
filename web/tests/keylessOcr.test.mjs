@@ -37,3 +37,11 @@ test('cancelled local recognition cannot apply a result after source/provider ch
  cancelled=true;callback();release({data:{text:'stale'}});
  await assert.rejects(()=>operation,/ยกเลิก/);assert.equal(terminated,1);
 });
+test('cancelled or terminated workers cannot emit late progress into the current dialog',async()=>{
+ let callback,logger,started,cancelled=false;const progress=[];
+ const operation=engine.recognizeLocal('image',{factory:async(a,b,options)=>{logger=options.logger;return {recognize:()=>{started=true;return new Promise(()=>{});},terminate:async()=>{}};},assertCurrent:()=>{if(cancelled)throw new Error('cancelled');},subscribe:fn=>{callback=fn;return()=>{};},onProgress:p=>progress.push(p)});
+ while(!started)await new Promise(resolve=>setTimeout(resolve,1));cancelled=true;callback();await assert.rejects(()=>operation,/cancelled/);logger({status:'initializing api',progress:0});assert.equal(progress.length,0);
+});
+test('OCR progress copy describes preparation/reading without exposing engine API terms',()=>{
+ assert.ok(engine.ocrProgressMessage);assert.doesNotMatch(engine.ocrProgressMessage({status:'initializing api',progress:0}),/api/i);assert.match(engine.ocrProgressMessage({status:'recognizing text',progress:.5}),/อ่านข้อความ.*50%/);assert.doesNotMatch(engine.ocrProgressMessage({status:'unknown',progress:Infinity}),/Infinity/);
+});
