@@ -2,7 +2,7 @@
 
 Audience: coding agents and maintainers. Read this for the code map; use [the approved scope](docs/enhancement-scope.md) for product decisions.
 
-Last updated: 2026-09-30 (Asia/Bangkok). Keyless Copilot implementation is in progress through `5637554`; [current QA](docs/qa-2026-09-30-copilot.md) distinguishes verified browser paths from blocked final gates. Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. See dated QA records for tested boundaries. Paths below are relative to the repository root.
+Last updated: 2026-10-01 (Asia/Bangkok). Keyless Copilot code through `60b019f` has 197 passing regressions, current browser journeys, inspected app-generated artifacts and actual archive restoration; see [current QA](docs/qa-2026-10-01-copilot.md) for evidence and named limits. Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. Historical results do not establish current live-provider health. Paths below are relative to the repository root.
 
 ## 1. Overview and quick reference
 
@@ -31,6 +31,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-30 | Added API test phase from session 01a0f0d7-4994-7c12-b65b-b46a432de5b7: per-tab encrypted keys, fresh provider models, optional clause assistance and OpenAI OCR | [Design and contracts](docs/ai-test-design.md); [API QA](docs/qa-2026-09-30-ai.md): 71 tests, cloud/browser checks, live Jev; OpenAI credit_balance_exhausted |
 | 2026-09-30 | Added OpenRouter as an independently selected LLM/OCR provider, key-specific authentication, fresh capability-filtered catalogue and chat-completion adapter | [OpenRouter QA](docs/qa-2026-09-30-openrouter.md): 79 tests plus live default-model LLM/Thai page OCR; keys cleared, no session data in project archive |
 | 2026-09-30 | User delegated autonomous keyless complete-loop Copilot enhancement; created source checkpoint and acceptance/scenario plan | [Checkpoint](docs/checkpoint-2026-09-30.md), [active plan](docs/autonomous-copilot-plan.md); implementation/verification ongoing |
+| 2026-10-01 | Verified keyless scan/manual/Office flows, repair/CRUD/Undo, source review and shared proof, actual outputs/archive restore; hardened archive resource/native-profile validation | Code `60b019f`, 197 regressions, [continued QA](docs/qa-2026-10-01-copilot.md); Word visual rendering and maximum-size load remain untested |
 
 The intake production code through `5c9b182` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
@@ -165,22 +166,23 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 - Rotated evidence-page annotation export is rejected. Preserve the visible error until rotation-aware geometry is implemented and verified.
 - Deterministic rules cover known vocabulary and conditions, not every TOR sentence. Unsupported/ambiguous proof needs review. Optional API assistance proposes source-backed text/semantic judgments and does not replace deterministic numeric failures or grant a Comply verdict.
 - Template import is not a general-purpose Office/PDF converter. Comply intake supports compatible DOCX tables, the first XLSX worksheet, and text-PDF column geometry. Mixed table layouts require choosing the appropriate group/columns; PDF boundaries can be corrected in preview.
-- Comply-table mapping still requires a text layer. Scan TOR/proof has local OCR/manual paths; optional cloud OCR uses the explicitly selected provider. Geometry comes from the selected actual page/region. Actual local-worker browser accuracy and final export/archive gates for this enhancement remain pending in the current QA record.
+- Comply-table mapping still requires a text layer. Scan TOR/proof has local OCR/manual paths; optional cloud OCR uses the explicitly selected provider. Geometry comes from the selected actual page/region. Current keyless OCR/output/restore journeys are verified. Thai OCR can misread technical tokens: the synthetic IPv6 case required manual correction, with raw/accepted text retained and human review still required.
 - `validateProfile` currently requires the TOR and proposal fields, with 2–12 columns. A submission template should also retain comparison/reference columns from the approved scope; do not assume the validator guarantees every output field.
 - Single files are limited to 40 MB in the UI, and archive originals to 160 MB. The maximum-size archive has not been load-tested.
 - Clearing site storage can delete local projects. The portable archive is the transfer/backup mechanism.
 - There is no tracked dependency lockfile at this revision. A cloud build success does not establish reproducibility for all future dependency resolution.
 - Synthetic QA projects and downloaded artifacts may remain in the test browser/Downloads. They are not production/customer examples.
+- DOCX contents/native package structure are verified, but paginated Word visual rendering could not run because neither Word COM nor LibreOffice is available. XLSX was inspected structurally, not in native Excel. Small-file download links were received; large Blob/native OS download behavior remains a separate boundary.
 
 ## 10. Continuing work
 
 Load only the landmarks needed for the task after this handoff. Keep approved behavior in the scope document, architecture/status in this file, and dated observations in a QA record. A new user decision changes the relevant source of truth; it does not require duplicating the whole interview across documents.
 
-## Keyless Copilot implementation handoff — 2026-09-30
+## Keyless Copilot implementation handoff — updated 2026-10-01
 
 - Pure boundaries: `readingModel.mjs`, `projectMutations.mjs`, `workflowModel.mjs`, `localOcr.mjs`, `docxNumbering.mjs`, `xlsxSourceRows.mjs`.
 - Workbench tools: `ReadingRepair`, `SourcePageTools`, `EvidenceEditor`, metadata resource editing, inline `DeleteButton`; sequential local batch progress/cancel.
 - Undo keeps one in-memory metadata snapshot until the next persisted project mutation. Removed document blobs remain in IndexedDB for recovery; archive includes referenced files only.
 - Source repair acceptance records before/after and canonical page/region; normal source-page edits clear stale regions. Editing resolved scan clauses reopens page coverage.
-- Latest cloud code build `5637554` reached READY (`dpl_UcAArW3Gq4BvKkdM293swxSNLzT5`). A following source-page regression fix is being verified/published.
-- Final acceptance is still pending: in-app browser native confirmation blocked input; user cancellation requested. Resume actual local OCR, inline CRUD, source repair, artifact generation/inspection and archive restoration before declaring the goal achieved.
+- Latest code build `60b019f` reached READY (`dpl_9iuyVJkunkzKBMunmEDBt3TfKhjC`), assigned to the production alias. Actual malformed-resource archive import shows an actionable error and creates no project; valid import afterward creates a separate working two-clause project.
+- The earlier native-confirmation blockage is resolved. Workbench recoverable deletion uses inline two-step controls. Functional acceptance evidence and remaining access/accuracy/load limits are in the October 1 QA record; do not restart the blocked-browser investigation or claim perfect OCR/Word pagination.

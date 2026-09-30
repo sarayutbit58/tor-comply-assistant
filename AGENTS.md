@@ -4,7 +4,7 @@
 
 1. Read [CONTEXT.md](CONTEXT.md) before changing this repository. Check `git status --short --branch` and inspect the files relevant to the task; preserve unrelated user changes.
 2. **Product behavior:** read [docs/enhancement-scope.md](docs/enhancement-scope.md) before changing workflows, compliance rules, file roles, review gates, templates, or exports. It records the approved decisions. A newer direct user instruction takes precedence; update the affected decision when it changes.
-3. **Debugging:** read the available `auditing-debugging-applications` skill before investigation, and use `systematic-debugging` for defects. For current keyless work read [docs/qa-2026-09-30-copilot.md](docs/qa-2026-09-30-copilot.md) and the pending gates in [docs/autonomous-copilot-plan.md](docs/autonomous-copilot-plan.md); older QA records establish only their named revisions. Historical QA is evidence for its recorded revision, not proof for new changes.
+3. **Debugging:** read the available `auditing-debugging-applications` skill before investigation, and use `systematic-debugging` for defects. For keyless work read [docs/qa-2026-10-01-copilot.md](docs/qa-2026-10-01-copilot.md) and [docs/autonomous-copilot-plan.md](docs/autonomous-copilot-plan.md); the September 30 record is the initial checkpoint. Historical QA is evidence for its recorded revision, not proof for new changes. Preserve the named OCR, Word-rendering and large-file verification limits.
 
 ## Implementation guardrails
 
