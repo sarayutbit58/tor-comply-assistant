@@ -15,7 +15,7 @@ export function detectTableGrid({width,height,data},count,headerBand=null) {
     best=Math.max(best,run);if(best>Math.max(38,height*.05))candidates.push(x);
   }
   const vertical=bands(candidates).map(g=>g.reduce((a,b)=>a+b,0)/g.length);
-  if(vertical.length!==count+1)return null;
+  if(count===null?(vertical.length<3||vertical.length>13):vertical.length!==count+1)return null;
   const left=Math.round(vertical[0]),right=Math.round(vertical[vertical.length-1]),horizontal=[];
   for(let y=8;y<height-8;y++){
     let run=0,best=0,gap=0;

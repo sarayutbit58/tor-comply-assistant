@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {extractComplyRequirements,pdfTableRows,isComplyTable} from '../src/lib/complyIntake.mjs';
+import {extractComplyRequirements,pdfTableRows,isComplyTable,pdfGridHeader} from '../src/lib/complyIntake.mjs';
 const table=(rows,headers=['เลขข้อ','รายละเอียดตาม TOR','รายละเอียดที่เสนอ','ผล','อ้างอิง'])=>({id:'docx:0',format:'docx',tableIndex:0,headers,headerRow:0,rows:rows.map((cells,i)=>({cells,row:i+2,page:null}))});
 test('filled or empty answer columns yield identical requirements and no old answers',()=>{
   const filled=table([['5.1','รองรับ IPv6','OLD_PROPOSAL','Comply','old.pdf'],['5.2','มี 24 พอร์ต','','','']]);
@@ -53,4 +53,17 @@ test('unselected short-header comply tables are recognized for removal from nati
   const t=table([['5.9','Support IPv6','OLD_PASS']],['ข้อ','TOR','เสนอ','ผล','อ้างอิง']);
   assert.equal(isComplyTable(t),true);
   assert.equal(isComplyTable({headers:['Company','Address'],rows:[{cells:['1234567890123','QA Address']}]}),false);
+});
+test('a narrow number column stays separate and first-row old proposal never becomes a header',()=>{
+  const edges=[.03,.1,.46,.69,.8,.96],grid={edges,rows:[.1,.16,.26,.36]};
+  const page={page:1,items:[
+    {text:'No.',box:[.04,.12,.025,.016]},{text:'TOR Requirement',box:[.11,.12,.18,.016]},
+    {text:'Proposed Specification',box:[.47,.12,.17,.016]},{text:'Comparison',box:[.70,.12,.08,.016]},{text:'Reference',box:[.81,.12,.09,.016]},
+    {text:'5.1',box:[.04,.18,.025,.016]},{text:'Support IPv6',box:[.11,.18,.18,.016]},{text:'OLD_PROPOSAL',box:[.47,.18,.17,.016]},
+  ]};
+  const header=pdfGridHeader(page,grid);
+  assert.equal(header.headers.length,5);assert.equal(header.headers[0],'No.');assert.ok(!header.headers.join(' ').includes('OLD'));
+  const rows=pdfTableRows([page],{edges,headerBottom:header.bottom,bottom:.36,rowEdges:{1:grid.rows.slice(1)}});
+  const result=extractComplyRequirements([{id:'pdf:0',format:'pdf',headers:header.headers,rows}],{numberColumn:0,textColumn:1});
+  assert.deepEqual(result.requirements.map(r=>r.id),['5.1']);
 });

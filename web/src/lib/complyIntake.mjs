@@ -103,3 +103,12 @@ export function pdfTableRows(pages,layout) {
   }
   return rows;
 }
+export function pdfGridHeader(page,grid) {
+  if(!grid||grid.rows.length<2)return null;
+  const top=grid.rows[0],bottom=grid.rows[1];
+  const rows=pdfTableRows([page],{edges:grid.edges,headerBottom:top,bottom,rowEdges:{[page.page]:[top,bottom]}});
+  const headers=rows[0]?.cells;
+  if(!headers||headers.some(text=>/^(?:ข้อ\s*)?[0-9๐-๙]+(?:\.[0-9๐-๙]+)*[.)]?(?:\s|$)/u.test(clean(text))))return null;
+  const recognizable=headers.filter(h=>/เลขข้อ|^ข้อ$|ลำดับ|รายละเอียด|ข้อกำหนด|เสนอ|อ้างอิง|เปรียบเทียบ|^no[.]?$|clause|requirement|propos|reference|comparison|result|status/i.test(h)).length;
+  return recognizable>=2?{headers,edges:grid.edges,top,bottom,page:page.page}:null;
+}

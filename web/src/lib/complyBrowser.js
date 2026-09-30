@@ -1,7 +1,7 @@
 import {detectTableGrid} from './pdfTableGrid.mjs';
 import {readOffice,nodes,attr,textOf} from './officeXml';
 import {guessField} from './tableModel.mjs';
-import {pdfTableRows,inferSourceMapping} from './complyIntake.mjs';
+import {pdfTableRows,inferSourceMapping,pdfGridHeader} from './complyIntake.mjs';
 const headerScore=cells=>new Set(cells.filter(Boolean).map((text,i)=>{
   if(!/ลำดับ|เลขข้อ|รายละเอียด|ข้อกำหนด|ผู้เสนอ|อ้างอิง|เปรียบเทียบ|^ข้อ$|^TOR$|^เสนอ$|^ผล$|\bno\b|clause|requirement|propos|reference|result|comparison|compliance/i.test(text))return null;
   return guessField(text,i);
@@ -81,14 +81,12 @@ export async function readComplyDocument(file) {
     return {format,tables,defaultTableId:selected.id,template,pages:[]};
   }
   if(format!=='pdf')throw new Error('ตาราง Comply รองรับ DOCX, PDF หรือ XLSX');
-  const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
+    const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
   const pages=await extractPdf(file);
   const unreadable=pages.filter(p=>!p.text.trim()).map(p=>p.page);
   if(unreadable.length)throw new Error('PDF หน้า '+unreadable.join(', ')+' ไม่มีข้อความให้อ่าน รอบนี้ใช้ PDF ที่เลือกข้อความได้ หรือ DOCX/XLSX');
-  const template=await readTemplate(file,{pdfPages:pages,sourceRead:true});
-  const headers=template.profile.columns.map(c=>c.heading),count=headers.length;
-  const pdf=await loadPdf(file),pageLayouts={},rowEdges={};
-  let firstLayout;
+  const pdf=await loadPdf(file),info=[];
+  let mainHeader=null;
   try {
     for(const page of pages) {
       const anchors=pdfHeaderItems(page);
@@ -96,26 +94,36 @@ export async function readComplyDocument(file) {
       const canvas=document.createElement('canvas');await paintPage(pdf,page.page,canvas,1.2);
       const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
       const band=anchors.length?[Math.max(0,Math.min(...anchors.map(a=>a.box[1]))-.02),headerTextBottom+.02]:null;
-      const grid=detectTableGrid(pixels,count,band);canvas.width=1;canvas.height=1;
-      let edges=grid?.edges;
-      if(!edges){
-        const groups=[];
-        for(const anchor of anchors){if(!groups.some(x=>Math.abs(x-anchor.box[0])<.09))groups.push(anchor.box[0]);}
-        const widths=template.profile.columns.map(c=>c.width),sum=widths.reduce((a,b)=>a+b,0);
-        const left=groups[0]??.05;edges=[left];for(const w of widths)edges.push(Math.min(.98,edges[edges.length-1]+(.93-left)*w/sum));
-        if(groups.length===count)edges=[Math.max(0,groups[0]-.015),...groups.slice(1).map(x=>Math.max(0,x-.01)),.96];
-      }
-      const headerBottom=headerTextBottom!==null?(grid?.rows.find(y=>y>headerTextBottom+.001&&y<headerTextBottom+.04)??headerTextBottom+.009):(grid?.rows[0]??.06);
-      const bottom=grid?.rows[grid.rows.length-1]??.94;
-      const cut={edges,headerBottom,bottom};
-      pageLayouts[page.page]=cut;
-      if(grid?.rows.length>1)rowEdges[page.page]=grid.rows.filter(y=>y>=headerBottom-.004);
-      if(!firstLayout)firstLayout=cut;
+      const grid=detectTableGrid(pixels,null,band);canvas.width=1;canvas.height=1;
+      const header=pdfGridHeader(page,grid);
+      if(header&&!mainHeader)mainHeader=header;
+      info.push({page,anchors,grid,header,headerTextBottom});
     }
   } finally {await pdf.destroy();}
+  const template=await readTemplate(file,{pdfPages:pages,pdfSource:mainHeader,sourceRead:true});
+  const headers=template.profile.columns.map(c=>c.heading),count=headers.length,pageLayouts={},rowEdges={},warnings=[];
+  let firstLayout;
+  for(const {page,anchors,grid,header,headerTextBottom}of info){
+    if(grid&&grid.edges.length!==count+1)throw new Error('PDF หน้า '+page.page+' มีจำนวนคอลัมน์ต่างจากตารางหลัก ใช้ไฟล์ที่มีโครงตารางเดียวกัน หรือ DOCX/XLSX');
+    let edges=grid?.edges;
+    if(!edges){
+      warnings.push('PDF หน้า '+page.page+' ไม่พบเส้นตารางครบ โปรดตรวจหรือปรับขอบเขตคอลัมน์ใน preview');
+      const groups=[];
+      for(const anchor of anchors)if(!groups.some(x=>Math.abs(x-anchor.box[0])<.035))groups.push(anchor.box[0]);
+      const widths=template.profile.columns.map(c=>c.width),sum=widths.reduce((a,b)=>a+b,0),left=groups[0]??.05;
+      edges=[left];for(const w of widths)edges.push(Math.min(.98,edges[edges.length-1]+(.93-left)*w/sum));
+      if(groups.length===count)edges=[Math.max(0,groups[0]-.015),...groups.slice(1).map(x=>Math.max(0,x-.01)),.96];
+    }
+    const headerBottom=header?.bottom??(grid?.rows[0]??(headerTextBottom!==null?headerTextBottom+.009:.06));
+    const bottom=grid?.rows[grid.rows.length-1]??.94;
+    const cut={edges,headerBottom,bottom};pageLayouts[page.page]=cut;
+    if(grid?.rows.length>1)rowEdges[page.page]=grid.rows.filter(y=>y>=headerBottom-.004);
+    if(!firstLayout)firstLayout=cut;
+  }
   const layout={...firstLayout,pageLayouts,rowEdges};
   const rows=pdfTableRows(pages,layout);
-  return {format,tables:[{id:'pdf:0',format:'pdf',headers,headerRow:0,score:headerScore(headers),rows}],defaultTableId:'pdf:0',template,pages,pdfLayout:layout};
+  return {format,tables:[{id:'pdf:0',format:'pdf',headers,headerRow:0,score:headerScore(headers),rows}],defaultTableId:'pdf:0',template,pages,pdfLayout:layout,warnings};
+
 }
 export async function templateForSource(file,prepared,table) {
   if(prepared.format==='pdf')return prepared.template;

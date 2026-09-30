@@ -78,24 +78,25 @@ export async function readTemplate(file,options={}) {
   } else if(format==='pdf') {
     profile.headerFill='FFFFFF';profile.headerColor='262629';profile.borderColor='777777';
     const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');
-    const pages=options.pdfPages||await extractPdf(file,1), first=pages[0];
+    const pages=options.pdfPages||await extractPdf(file,1),pageNumber=options.pdfSource?.page||1,first=pages.find(p=>p.page===pageNumber)||pages[0];
     const pdf=await loadPdf(file);
     try {
-      const pg=await pdf.getPage(1),vp=pg.getViewport({scale:1});
+      const pg=await pdf.getPage(pageNumber),vp=pg.getViewport({scale:1});
       profile.pageWidth=vp.width;profile.pageHeight=vp.height;
       const anchors=first.items.filter(item=>/รายละเอียด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|propos|reference|result|comparison|status|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
-      if(anchors.length>=3){
-        const y=Math.min(...anchors.map(a=>a.box[1]));
-        const headerItems=anchors.filter(a=>Math.abs(a.box[1]-y)<.065).sort((a,b)=>a.box[0]-b.box[0]);
+      if(anchors.length>=3||options.pdfSource){
+        const y=options.pdfSource?.top??Math.min(...anchors.map(a=>a.box[1]));
+        const headerItems=(options.pdfSource?first.items.filter(a=>a.box[1]>=options.pdfSource.top-.002&&a.box[1]<options.pdfSource.bottom):anchors.filter(a=>Math.abs(a.box[1]-y)<.035)).sort((a,b)=>a.box[0]-b.box[0]);
         const groups=[];
-        for(const item of headerItems){const group=groups.find(g=>Math.abs(g.x-item.box[0])<.09);if(group)group.text+=' '+item.text;else groups.push({x:item.box[0],text:item.text});}
-        if(groups.length>=3)profile.columns=columns(groups.map(g=>g.text),groups.map((g,i)=>((groups[i+1]?.x||.96)-g.x)*100));
+        for(const item of headerItems){const group=groups.find(g=>Math.abs(g.x-item.box[0])<.035);if(group)group.text+=' '+item.text;else groups.push({x:item.box[0],text:item.text});}
+        if(options.pdfSource)profile.columns=columns(options.pdfSource.headers,options.pdfSource.edges.slice(0,-1).map((x,i)=>(options.pdfSource.edges[i+1]-x)*100));
+        else if(groups.length>=3)profile.columns=columns(groups.map(g=>g.text),groups.map((g,i)=>((groups[i+1]?.x||.96)-g.x)*100));
         if(y>.03){
-          const canvas=document.createElement('canvas');await paintPage(pdf,1,canvas,1.5);
+          const canvas=document.createElement('canvas');await paintPage(pdf,pageNumber,canvas,1.5);
           const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
           const histogram=new Map();
-          const topY=Math.max(0,Math.floor((y-.006)*canvas.height));
-          const bottomY=Math.min(canvas.height,Math.ceil((Math.max(...headerItems.map(i=>i.box[1]+i.box[3]))+.006)*canvas.height));
+          const topY=Math.max(0,Math.floor((options.pdfSource?options.pdfSource.top+.003:y-.006)*canvas.height));
+          const bottomY=Math.min(canvas.height,Math.ceil((options.pdfSource?options.pdfSource.bottom-.003:Math.max(...headerItems.map(i=>i.box[1]+i.box[3]))+.006)*canvas.height));
           const leftX=Math.max(0,Math.floor((Math.min(...headerItems.map(i=>i.box[0]))-.008)*canvas.width));
           const rightX=Math.min(canvas.width,Math.ceil(Math.max(...headerItems.map(i=>i.box[0]+i.box[2]))*canvas.width));
           for(let py=topY;py<bottomY;py+=2)for(let px=leftX;px<rightX;px+=3){
