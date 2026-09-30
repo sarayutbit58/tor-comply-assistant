@@ -1,5 +1,6 @@
 import {uniqueRequirements} from './torModel.mjs';
 import {guessField} from './tableModel.mjs';
+import {reconstructReading,readingRisks,regionUnion} from './readingModel.mjs';
 const digits='๐๑๒๓๔๕๖๗๘๙';
 const normalizeId=value=>String(value).replace(/[๐-๙]/gu,d=>String(digits.indexOf(d)));
 const clean=value=>String(value??'').replace(/\r/g,'').replace(/[ \t]+/g,' ').trim();
@@ -23,33 +24,47 @@ export function isComplyTable(table) {
 export function extractComplyRequirements(tables,{numberColumn=null,textColumn}) {
   if(!Number.isInteger(textColumn)||textColumn<0)throw new Error('เลือกคอลัมน์ข้อกำหนด TOR');
   if(numberColumn!==null&&(!Number.isInteger(numberColumn)||numberColumn<0||numberColumn===textColumn))throw new Error('คอลัมน์เลขข้อและ TOR ต้องแยกกัน หรือเลือกเลขข้ออยู่ในข้อความ TOR');
-  const requirements=[],warnings=[];
+  const requirements=[],warnings=[],unresolvedRows=[];
   let current=null,skipped=0;
   for(const table of tables) {
+    warnings.push(...(table.warnings || []));
     if(textColumn>=table.headers.length||(numberColumn!==null&&numberColumn>=table.headers.length))throw new Error('คอลัมน์ที่เลือกไม่ตรงกับตาราง');
     const selectedHeader=table.headers[textColumn];
     if(/ผู้เสนอ|รายละเอียดที่เสนอ|propos|offered|reference|อ้างอิง|เปรียบเทียบ|comparison|compliance|result|status|^ผล$/i.test(selectedHeader))throw new Error('คอลัมน์ที่เลือกเป็นคำตอบหรือผลเดิม กรุณาเลือกข้อกำหนด TOR');
     for(const row of table.rows) {
-      if(row.ambiguousColumns?.includes(textColumn)||(numberColumn!==null&&row.ambiguousColumns?.includes(numberColumn)))throw new Error('ข้อความ PDF คร่อมคอลัมน์ที่เลือก หน้า '+row.page+' กรุณาปรับขอบคอลัมน์ หรือใช้ DOCX/XLSX');
+      if(row.ambiguousColumns?.includes(textColumn)||(numberColumn!==null&&row.ambiguousColumns?.includes(numberColumn)))throw new Error(table.format==='pdf' ? 'ข้อความ PDF คร่อมคอลัมน์ที่เลือก หน้า '+row.page+' กรุณาปรับขอบคอลัมน์ หรือใช้ DOCX/XLSX' : 'รวมเซลล์หรือข้อความ XLSX/DOCX คร่อมคอลัมน์ที่เลือก แถว '+row.row+' กรุณาแยกเซลล์หรือกรอกข้อ TOR เอง');
+      warnings.push(...(row.warnings || []));
       const text=clean(row.cells[textColumn]);
-      if(!text)continue;
-      if(signature(text)===signature(selectedHeader))continue;
       const rawNumber=numberColumn===null?'':clean(row.cells[numberColumn]);
       const explicit=numberOnly.exec(rawNumber);
-      if(rawNumber&&!explicit){skipped++;continue;}
+      if(!text){
+        if(explicit){const reason='ข้อ '+normalizeId(explicit[1])+' แถว '+row.row+' ไม่มีข้อความ TOR'+(row.cellMerges?.[textColumn]&&!row.cellMerges[textColumn].isAnchor?' ในเซลล์ต่อเนื่องที่รวมไว้':'')+'; ยังไม่คัดลอกหรือเดาข้อกำหนด';warnings.push(reason);unresolvedRows.push({tableId:table.id,row:row.row,number:normalizeId(explicit[1]),reason});}
+        continue;
+      }
+      if(signature(text)===signature(selectedHeader))continue;
+      if(rawNumber&&!explicit){skipped++;unresolvedRows.push({tableId:table.id,row:row.row,number:rawNumber,reason:'เลขข้อไม่ชัดเจน'});continue;}
       const embedded=numberedText.exec(text);
       const id=explicit?normalizeId(explicit[1]):numberColumn===null&&embedded?normalizeId(embedded[1]):null;
+      const raw=clean(row.rawCells?.[textColumn]??row.cells[textColumn]);
+      const rawEmbedded=numberedText.exec(raw);
+      const rawBody=rawEmbedded&&normalizeId(rawEmbedded[1])===id?clean(rawEmbedded[2]):raw;
+      const page=table.format==='pdf'?row.page:null,box=row.cellBoxes?.[textColumn];
       if(id) {
         const body=embedded&&normalizeId(embedded[1])===id?clean(embedded[2]):text;
-        current={id,title:body.slice(0,120),textSnapshot:body,sourcePage:table.format==='pdf'?row.page:null,sourceMethod:'table-text',sourceTableId:table.id,sourceTableIndex:table.tableIndex??null,sourceRow:row.row,reviewed:false};
+        current={id,title:body.slice(0,120),textSnapshot:body,rawTextSnapshot:rawBody,sourcePage:page,sourcePages:page?[page]:[],sourceRegions:page&&box?[{page,box}]:[],readingIssues:readingRisks(body),sourceMethod:'table-text',sourceTableId:table.id,sourceTableIndex:table.tableIndex??null,sourceRow:row.row,reviewed:false};
         requirements.push(current);
-      } else if(current)current.textSnapshot+='\n'+text;
+      } else if(current){
+        current.textSnapshot+='\n'+text;current.rawTextSnapshot+='\n'+rawBody;
+        if(page){current.sourcePages=[...new Set([...current.sourcePages,page])];if(box)current.sourceRegions.push({page,box});}
+        current.readingIssues=readingRisks(current.textSnapshot);
+      }
       else skipped++;
     }
   }
   if(skipped)warnings.push('มี '+skipped+' แถวที่ไม่มีเลขข้อชัดเจนหรือเป็นข้อความนำ โปรดตรวจรายการที่อ่านได้');
   if(!requirements.length)warnings.push('ไม่พบเลขข้อและข้อกำหนด ช่องคำตอบว่างได้ แต่ตารางต้องมีข้อ TOR หรือเพิ่มข้อเองภายหลัง');
-  return {requirements:uniqueRequirements(requirements),warnings};
+  for(const req of requirements)if(req.sourceRegions.length)req.sourceRegions=req.sourcePages.flatMap(page=>{const regions=req.sourceRegions.filter(region=>region.page===page);return regions.length?[{page,box:regionUnion(regions.map(region=>({text:'TOR',box:region.box})))}]:[];});
+  return {requirements:uniqueRequirements(requirements),warnings:[...new Set(warnings)],unresolvedRows};
 }
 export function validatePdfLayout(layout,count) {
   const edges=layout.edges;
@@ -62,9 +77,9 @@ export function pdfTableRows(pages,layout) {
   for(const page of pages) {
     const pageLayout=layout.pageLayouts?.[page.page]||layout;
     validatePdfLayout(pageLayout,count);
-    const items=(page.items||[]).filter(i=>i.box[1]>=pageLayout.headerBottom-.002&&i.box[1]<pageLayout.bottom).sort((a,b)=>a.box[1]-b.box[1]||a.box[0]-b.box[0]);
+    const items=(page.items||[]).map((item,index)=>({...item,sourceOrder:index})).filter(i=>Array.isArray(i.box)&&i.box.length===4&&i.box.every(Number.isFinite)&&i.box[1]>=pageLayout.headerBottom-.002&&i.box[1]<pageLayout.bottom).sort((a,b)=>a.box[1]-b.box[1]||a.box[0]-b.box[0]);
     const rowEdges=layout.rowEdges?.[page.page];
-    const groups=[];
+    const groups=rowEdges?.length>1?[]:reconstructReading(items).lines.map(line=>({y:line.box[1],items:line.items}));
     for(const item of items) {
       let group;
       if(rowEdges?.length>1) {
@@ -72,10 +87,7 @@ export function pdfTableRows(pages,layout) {
         if(bucket<0)continue;
         group=groups.find(g=>g.bucket===bucket);
         if(!group){group={bucket,y:item.box[1],items:[]};groups.push(group);}
-      } else {
-        group=groups.find(g=>Math.abs(g.y-item.box[1])<.008);
-        if(!group){group={y:item.box[1],items:[]};groups.push(group);}
-      }
+      } else continue;
       group.items.push(item);
     }
     for(const [rowIndex,group]of groups.entries()) {
@@ -89,16 +101,9 @@ export function pdfTableRows(pages,layout) {
         if(crossed.length>1)crossed.forEach(i=>ambiguous.add(i));
         cells[col].push(item);
       }
-      const strings=cells.map(cell=>{
-        const lines=[];
-        for(const item of cell.sort((a,b)=>a.box[1]-b.box[1]||a.box[0]-b.box[0])) {
-          let line=lines.find(l=>Math.abs(l.y-item.box[1])<.008);
-          if(!line){line={y:item.box[1],text:[]};lines.push(line);}
-          line.text.push(item.text);
-        }
-        return lines.map(l=>l.text.join(' ')).join('\n');
-      });
-      if(strings.some(Boolean))rows.push({cells:strings,page:page.page,row:rowIndex+1,ambiguousColumns:[...ambiguous]});
+      const readings=cells.map(cell=>reconstructReading([...cell].sort((a,b)=>a.sourceOrder-b.sourceOrder)));
+      const strings=readings.map(reading=>reading.text);
+      if(strings.some(Boolean))rows.push({cells:strings,rawCells:readings.map(reading=>reading.rawText),cellBoxes:cells.map(regionUnion),page:page.page,row:rowIndex+1,ambiguousColumns:[...ambiguous]});
     }
   }
   return rows;

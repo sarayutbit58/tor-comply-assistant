@@ -48,10 +48,10 @@ export function AiSettings() {
     <ProviderKey provider="openrouter" title="OpenRouter" status={session.openrouter}/>
     <div className="form-grid">{[['llm','LLM'],['ocr','OCR']].map(([kind,title])=>{
       const provider=session[kind+'Provider'],status=session[provider],field=kind+'Model';
-      const models=status.models.filter(m=>provider==='openai'||m[kind==='ocr'?'canOcr':'canDraft']);
+      const models=(status?.models||[]).filter(m=>provider==='openai'||m[kind==='ocr'?'canOcr':'canDraft']);
       return <div className="stack-form" key={kind}>
-        <label className="form-label">ผู้ให้บริการ {title}<select aria-label={'ผู้ให้บริการ '+title} className="form-input" value={provider} onChange={e=>aiSession.setProvider(kind,e.target.value)}><option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option></select></label>
-        {status.phase==='ready'?<><label className="form-label">โมเดล {title}<select className="form-input" aria-label={'โมเดล '+title} value={status[field]} onChange={e=>aiSession.setModel(field,e.target.value,provider)}><option value="" disabled>เลือกโมเดลที่รองรับงานนี้</option>{models.map(m=><option key={m.id} value={m.id}>{m.id} — {m.label}</option>)}</select></label><small className="muted">{models.find(m=>m.id===status[field])?.description}</small></>:<p className="muted">เชื่อมคีย์ {provider==='openrouter'?'OpenRouter':'OpenAI'} สำหรับงาน {title} ก่อน</p>}
+        <label className="form-label">ผู้ให้บริการ {title}<select aria-label={'ผู้ให้บริการ '+title} className="form-input" value={provider} onChange={e=>aiSession.setProvider(kind,e.target.value)}>{kind==='ocr'&&<option value="local">OCR ในเครื่อง · ไม่ใช้ API Key</option>}<option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option></select></label>
+        {provider==='local'?<p className="notice">อ่านข้อความไทย/อังกฤษในเบราว์เซอร์ ไม่ส่งภาพให้ AI API และถอดข้อความเองได้เสมอ</p>:status.phase==='ready'?<><label className="form-label">โมเดล {title}<select className="form-input" aria-label={'โมเดล '+title} value={status[field]} onChange={e=>aiSession.setModel(field,e.target.value,provider)}><option value="" disabled>เลือกโมเดลที่รองรับงานนี้</option>{models.map(m=><option key={m.id} value={m.id}>{m.id} — {m.label}</option>)}</select></label><small className="muted">{models.find(m=>m.id===status[field])?.description}</small></>:<p className="muted">เชื่อมคีย์ {provider==='openrouter'?'OpenRouter':'OpenAI'} สำหรับงาน {title} ก่อน</p>}
       </div>;
     })}</div>
     <p className="muted">แต่ละบริการแนะนำสูงสุด 5 รุ่นจากรายการล่าสุด OCR แสดงเฉพาะรุ่นรับภาพได้ LLM ผ่าน OpenRouter ต้องรองรับ structured output เริ่มงานง่ายและเปลี่ยนรุ่นเอง การแบ่งระดับยังไม่ใช่ benchmark TOR ภาษาไทย</p>

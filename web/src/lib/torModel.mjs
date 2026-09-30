@@ -1,3 +1,4 @@
+import {reconstructReading,readingRisks,regionUnion} from './readingModel.mjs';
 const headingPattern = /^\s*(?:ข้อ\s*)?([0-9๐-๙]+(?:\.[0-9๐-๙]+)*)(?:[.)])?\s+(.{3,})$/u;
 const domainTerms = ['MPLS', 'IPv6', 'IPv4', 'NOC', 'SLA', 'VPN', 'Firewall', 'Switch', 'Router', 'Server', 'Storage', 'วงจร', 'เครือข่าย', 'รายงาน', 'บริการ'];
 const thaiDigits = '๐๑๒๓๔๕๖๗๘๙';
@@ -47,11 +48,15 @@ export function parsePages(pages, sourceMethod = 'text') {
   }
 
   for (const page of pages) {
-    if (!page.text?.trim()) {
+    const rebuilt=page.items?.length?reconstructReading(page.items):null;
+    const reading=rebuilt?.text??page.text;
+    if (!reading?.trim()) {
       unreadablePages.push(page.page);
       continue;
     }
-    for (const raw of page.text.split(/\r?\n/u)) {
+    const lines=rebuilt?.lines||reading.split(/\r?\n/u).map(text=>({text,box:null}));
+    for (const sourceLine of lines) {
+      const raw=sourceLine.text;
       const line = sourceMethod === 'ocr'
         ? raw.trim().replace(/^ข[^0-9๐-๙]{0,10}(?=[0-9๐-๙]+(?:\.[0-9๐-๙]+)+\s)/u, '')
         : raw.trim();
@@ -60,9 +65,13 @@ export function parsePages(pages, sourceMethod = 'text') {
       if (found) {
         flushLeading();
         if (current) requirements.push(current);
-        current = { id: found.id, title: found.text.slice(0, 120), textSnapshot: found.text, sourcePage: page.page, sourceMethod };
+        current = {id:found.id,title:found.text.slice(0,120),textSnapshot:found.text,rawTextSnapshot:found.text,sourcePage:page.page,sourcePages:[page.page],sourceRegions:sourceLine.box?[{page:page.page,box:sourceLine.box}]:[],sourceMethod,readingIssues:readingRisks(found.text)};
       } else if (current) {
         current.textSnapshot += '\n' + line;
+        current.rawTextSnapshot += '\n'+line;
+        current.sourcePages=[...new Set([...current.sourcePages,page.page])];
+        if(sourceLine.box)current.sourceRegions.push({page:page.page,box:sourceLine.box});
+        current.readingIssues=readingRisks(current.textSnapshot);
       } else {
         if (leadingPage === null) leadingPage = page.page;
         leading.push(line);
@@ -71,6 +80,10 @@ export function parsePages(pages, sourceMethod = 'text') {
   }
   flushLeading();
   if (current) requirements.push(current);
+  for(const req of requirements)if(req.sourceRegions?.length){
+    const pages=[...new Set(req.sourceRegions.map(r=>r.page))];
+    req.sourceRegions=pages.map(page=>({page,box:regionUnion(req.sourceRegions.filter(r=>r.page===page).map(r=>({text:'source',box:r.box})))}));
+  }
   return { requirements: uniqueRequirements(requirements), unreadablePages };
 }
 

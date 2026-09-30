@@ -1,3 +1,4 @@
+import {reconstructReading} from './readingModel.mjs';
 let loadingLibrary;
 
 async function pdfLibrary() {
@@ -35,7 +36,8 @@ export async function extractPdf(blob, maxPages = Infinity) {
         const h = Math.max(1, item.height || Math.hypot(item.transform[2], item.transform[3]));
         return { text: item.str, box: [Math.max(0, x / viewport.width), Math.max(0, (y - h) / viewport.height), Math.max(.001, Math.min(1 - Math.max(0, x / viewport.width), Math.abs(item.width) / viewport.width)), Math.min(1, h / viewport.height)], end: Boolean(item.hasEOL) };
       });
-      pages.push({ page: number, text: content.items.map(item => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('').trim(), items });
+      const reading=reconstructReading(items);
+      pages.push({page:number,text:reading.text,rawText:content.items.map(item=>'str' in item?item.str+(item.hasEOL?'\n':' '):'').join('').trim(),items,lines:reading.lines.map(line=>({text:line.text,box:line.box})),readingIssues:reading.issues});
     }
     return pages;
   } finally {

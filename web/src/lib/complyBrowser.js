@@ -2,6 +2,7 @@ import {detectTableGrid} from './pdfTableGrid.mjs';
 import {readOffice,nodes,attr,textOf} from './officeXml';
 import {guessField} from './tableModel.mjs';
 import {pdfTableRows,inferSourceMapping,pdfGridHeader} from './complyIntake.mjs';
+import {prepareXlsxSourceRows} from './xlsxSourceRows.mjs';
 const headerScore=cells=>new Set(cells.filter(Boolean).map((text,i)=>{
   if(!/ลำดับ|เลขข้อ|รายละเอียด|ข้อกำหนด|ผู้เสนอ|อ้างอิง|เปรียบเทียบ|^ข้อ$|^TOR$|^เสนอ$|^ผล$|\bno\b|clause|requirement|propos|reference|result|comparison|compliance/i.test(text))return null;
   return guessField(text,i);
@@ -37,7 +38,7 @@ function columnIndex(ref) {
   return [...letters.toUpperCase()].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1;
 }
 function xlsxTable(office) {
-  const workbook=office.xml('xl/workbook.xml'),sheetInfo=workbook?nodes(workbook,'sheet')[0]:null;
+  const workbook=office.xml('xl/workbook.xml'),sheets=workbook?nodes(workbook,'sheet'):[],sheetInfo=sheets[0];
   const rels=office.xml('xl/_rels/workbook.xml.rels');
   const relId=sheetInfo?.getAttribute('r:id');
   const target=rels?nodes(rels,'Relationship').find(n=>n.getAttribute('Id')===relId)?.getAttribute('Target'):null;
@@ -47,7 +48,7 @@ function xlsxTable(office) {
   const shared=office.xml('xl/sharedStrings.xml'),strings=shared?nodes(shared,'si').map(textOf):[];
   const raw=nodes(sheet,'row');
   if(raw.length>10000)throw new Error('แผ่นงานมีเกิน 10,000 แถว');
-  const rows=raw.map((row,i)=>{
+  const rawRows=raw.map((row,i)=>{
     const cells=[];
     for(const cell of nodes(row,'c')){
       const index=columnIndex(cell.getAttribute('r'));if(index<0||index>100)continue;
@@ -55,13 +56,15 @@ function xlsxTable(office) {
     }
     return {cells:Array.from({length:cells.length},(_,i)=>cells[i]||''),row:Number(row.getAttribute('r')||i+1),page:null};
   });
+  const prepared=prepareXlsxSourceRows(rawRows,nodes(sheet,'mergeCell').map(cell=>cell.getAttribute('ref')),{sheetNames:sheets.map(value=>value.getAttribute('name') || 'Sheet')});
+  const rows=prepared.rows;
   const {index,score}=headerIndex(rows);
   const rawHeader=rows[index]?.cells||[],offset=rawHeader.findIndex(Boolean);
   if(offset<0)throw new Error('ไม่พบหัวตารางในแผ่นงานแรก');
   const headers=rawHeader.slice(offset);
   if(headers.length<2||headers.length>12)throw new Error('หัวตารางต้องมี 2–12 คอลัมน์');
-  const allRows=rows.map(r=>({...r,cells:r.cells.slice(offset)}));
-  return {id:'xlsx:0',format:'xlsx',headers,score,headerRow:index,sheetPath,sheetName:sheetInfo?.getAttribute('name')||'Sheet 1',columnOffset:offset,allRows,rows:allRows.slice(index+1)};
+  const allRows=rows.map(r=>({...r,cells:r.cells.slice(offset),ambiguousColumns:r.ambiguousColumns.map(column=>column-offset).filter(column=>column>=0),cellMerges:Object.fromEntries(Object.entries(r.cellMerges).filter(([column])=>Number(column)>=offset).map(([column,merge])=>[Number(column)-offset,{...merge,anchorColumn:merge.anchorColumn-offset,endColumn:merge.endColumn-offset}]))}));
+  return {id:'xlsx:0',format:'xlsx',headers,score,headerRow:index,sheetPath,sheetName:sheetInfo?.getAttribute('name')||'Sheet 1',columnOffset:offset,allRows,rows:allRows.slice(index+1),warnings:prepared.warnings};
 }
 function pdfHeaderItems(page) {
   const anchors=page.items.filter(item=>/รายละเอียด|ข้อกำหนด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|propos|reference|result|comparison|status|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
@@ -78,7 +81,7 @@ export async function readComplyDocument(file) {
     if(!tables.length)throw new Error('ไม่พบตารางที่อ่านได้ในไฟล์');
     const selected=[...tables].sort((a,b)=>b.score-a.score)[0];
     const template=await readTemplate(file,{office,tableIndex:selected.tableIndex,headerRow:selected.headerRow,sheetPath:selected.sheetPath,xlsxTable:selected,intake:true});
-    return {format,tables,defaultTableId:selected.id,template,pages:[]};
+    return {format,tables,defaultTableId:selected.id,template,pages:[],warnings:tables.flatMap(table=>table.warnings || [])};
   }
   if(format!=='pdf')throw new Error('ตาราง Comply รองรับ DOCX, PDF หรือ XLSX');
     const {loadPdf,extractPdf,paintPage}=await import('./pdfBrowser');

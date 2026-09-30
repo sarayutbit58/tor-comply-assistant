@@ -4,6 +4,7 @@ export const EVIDENCE_ROLES = new Set(['product', 'service', 'bidder']);
 export const linkedRequirements = mark => mark.requirementIds || (mark.requirementId ? [mark.requirementId] : []);
 export const selectedItems = row => row?.itemIds || (row?.productId ? [row.productId] : []);
 export function eligibleDocument(document) { return EVIDENCE_ROLES.has(document.role); }
+export function needsSourceReview(mark) {return mark.reviewed!==true;}
 export function evidenceFor(project, id) { return project.evidence.filter(mark => linkedRequirements(mark).includes(id)); }
 export function rowMode(project, id) { return project.rows[id]?.mode || project.mode || 'manual'; }
 export function emptyResponse(id) { return { requirementId: id, itemIds: [], proposal: '', comparison: STATUS.pending, mode: null, assessment: null }; }
@@ -41,7 +42,7 @@ export function passProblems(project, id) {
   if (!row?.proposal.trim()) problems.push('ยังไม่มีรายละเอียดที่เสนอ');
   if (!selectedItems(row).length && row?.scope!=='bidder') problems.push('ยังไม่ได้เลือกสินค้า/บริการ');
   if (!marks.length) problems.push('ยังไม่มีหลักฐาน');
-  if (marks.some(m => m.sourceMethod === 'ocr' && !m.reviewed)) problems.push('ยังไม่ได้ตรวจข้อความหลักฐาน OCR');
+  if (marks.some(needsSourceReview)) problems.push('ยังไม่ได้ตรวจข้อความหลักฐานที่อ้างเทียบต้นฉบับ');
   const docs = marks.map(m => project.docs.find(d => d.id === m.docId)).filter(Boolean);
   if (row?.scope==='bidder'&&!docs.some(d=>d.role==='bidder')) problems.push('ยังไม่มีหลักฐานคุณสมบัติผู้ยื่นข้อเสนอ');
   if (marks.some(m=>!m.quote?.trim())) problems.push('หลักฐานไม่มีข้อความที่อ้าง');
@@ -51,10 +52,11 @@ export function passProblems(project, id) {
 }
 export function exportProblems(project) {
   const errors = [];
+  if(project.sourceCoveragePending)errors.push('ตรวจความครบถ้วนของข้อกำหนดจากต้นฉบับที่มีคำเตือนก่อนส่งออก');
   if (project.requirements.some(r => r.duplicateOf)) errors.push('แก้เลขข้อ TOR ซ้ำก่อนส่งออก');
   if (project.unreadablePages.length) errors.push('ยังมีหน้า TOR ที่ต้อง OCR');
   if (project.requirements.some(r => !r.reviewed)) errors.push('ตรวจและยืนยัน TOR ทุกข้อก่อนส่งออก');
-  if (project.evidence.some(m => m.sourceMethod === 'ocr' && !m.reviewed)) errors.push('ตรวจข้อความหลักฐาน OCR ที่อ้างก่อนส่งออก');
+  for(const mark of project.evidence)if(needsSourceReview(mark))errors.push(mark.sourceMethod==='ocr'?'ตรวจข้อความหลักฐาน OCR ที่อ้างก่อนส่งออก':'ตรวจข้อความหลักฐานที่อ้างก่อนส่งออก');
   for (const req of project.requirements) if (project.rows[req.id]?.comparison === STATUS.pass) errors.push(...passProblems(project, req.id).map(e => 'ข้อ ' + req.id + ': ' + e));
   return [...new Set(errors)];
 }

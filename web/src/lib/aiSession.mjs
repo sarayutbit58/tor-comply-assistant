@@ -3,7 +3,7 @@ import {allowedOpenAiModel,defaultEasyModel} from './aiModelPolicy.mjs';
 import {allowedOpenRouterModel} from './openRouterPolicy.mjs';
 const PROVIDERS=['openai','openrouter','typesafe'];
 const emptyProvider=()=>({phase:'disconnected',models:[],model:'',llmModel:'',ocrModel:'',error:'',listedAt:null});
-const emptySession=()=>({openai:emptyProvider(),openrouter:emptyProvider(),typesafe:emptyProvider(),consent:false,llmProvider:'openai',ocrProvider:'openai'});
+const emptySession=()=>({openai:emptyProvider(),openrouter:emptyProvider(),typesafe:emptyProvider(),consent:false,llmProvider:'openai',ocrProvider:'local'});
 const SERVER_SNAPSHOT=emptySession();
 export function createAiSession({cryptoApi=globalThis.crypto,fetchImpl=(...args)=>fetch(...args)}={}) {
   const vault=createKeyVault(cryptoApi),listeners=new Set(),controllers=new Map();
@@ -16,6 +16,10 @@ export function createAiSession({cryptoApi=globalThis.crypto,fetchImpl=(...args)
   const check=provider=>{if(!PROVIDERS.includes(provider))throw new Error('ผู้ให้บริการไม่ถูกต้อง');};
   const providerFor=action=>action==='semantic'?'typesafe':action==='ocr'?state.ocrProvider:action==='draft'?state.llmProvider:null;
   const assertTicket=ticket=>{
+    if(ticket?.provider==='local'){
+      if(ticket.action!=='ocr'||(!ticket.explicitLocal&&state.ocrProvider!=='local')||ticket.workVersion!==workVersion)throw new Error('งาน OCR ในเครื่องเดิมถูกยกเลิกหลังเปลี่ยนการทำงาน');
+      return;
+    }
     check(ticket?.provider);
     if(!state.consent||state[ticket.provider].phase!=='ready'||generation[ticket.provider]!==ticket.version||ticket.workVersion!==workVersion||(ticket.action&&providerFor(ticket.action)!==ticket.provider))throw new Error('การเชื่อมต่อ/สิทธิ์ส่งข้อมูลเปลี่ยนแล้ว งานเดิมถูกยกเลิก');
   };
@@ -43,8 +47,12 @@ export function createAiSession({cryptoApi=globalThis.crypto,fetchImpl=(...args)
       return {provider,version:generation[provider],workVersion};
     },
     assertTicket,
+    cancelJobs(){cancelWork();emit({...state});},
+    captureLocalOcr(){return {provider:'local',workVersion,version:0,action:'ocr',explicitLocal:true};},
     captureFor(action) {
-      const provider=providerFor(action);check(provider);
+      const provider=providerFor(action);
+      if(provider==='local'&&action==='ocr')return {provider:'local',workVersion,version:0,action};
+      check(provider);
       if(!state.consent)throw new Error('อนุญาตส่งข้อความ/ภาพที่เลือกให้ API ในหน้าตั้งค่า AI ก่อน');
       if(state[provider].phase!=='ready')throw new Error('เชื่อมต่อ API Key ของบริการที่เลือกในแท็บนี้ก่อน');
       return {provider,version:generation[provider],workVersion,action};
@@ -71,7 +79,7 @@ export function createAiSession({cryptoApi=globalThis.crypto,fetchImpl=(...args)
       } finally {secret='';}
     },
     setProvider(kind,provider) {
-      if(!['llm','ocr'].includes(kind)||!['openai','openrouter'].includes(provider))throw new Error('ผู้ให้บริการงานนี้ไม่ถูกต้อง');
+      if(!['llm','ocr'].includes(kind)||!(kind==='ocr'?['local','openai','openrouter']:['openai','openrouter']).includes(provider))throw new Error('ผู้ให้บริการงานนี้ไม่ถูกต้อง');
       if(state[kind+'Provider']===provider)return;
       cancelWork();emit({...state,[kind+'Provider']:provider});
     },

@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { uniqueRequirements } from '@/lib/torModel.mjs';
 import { STATUS, emptyResponse, migrateProject, linkedRequirements, mergeMark, passProblems, eligibleDocument } from '@/lib/projectModel.mjs';
+import {appendRequirements,replaceRequirement,removeRequirement,updateOffering,removeOffering,updateDocumentMetadata,removeDocumentMetadata,updateEvidenceMark,resolveSourcePage} from '@/lib/projectMutations.mjs';
+import {recoverMetadata} from '@/lib/workflowModel.mjs';
 const newId = () => crypto.randomUUID();
 const invalidate = (rows, ids) => Object.fromEntries(Object.entries(rows).map(([id, row]) => [id, ids.includes(id) ? { ...row, comparison: STATUS.pending, assessment: null, decisionSource: null } : row]));
 const safeStorage = {
@@ -11,13 +13,21 @@ const safeStorage = {
   removeItem(name) { window.localStorage.removeItem(name); },
 };
 export const useProjectStore = create()(persist((set, get) => {
-  const edit = (id, transform) => set(state => ({ projects: state.projects.map(p => p.id === id ? { ...transform(p), updatedAt: new Date().toISOString() } : p) }));
+  let revision=0;
+  const edit = (id, transform, undoable=false) => set(state => {
+    const before=state.projects.find(p=>p.id===id);if(!before)throw new Error('ไม่พบโครงการ');
+    revision=Math.max(Date.now(),revision+1);
+    const next={...transform(before),updatedAt:new Date(revision).toISOString()};
+    return {projects:state.projects.map(p=>p.id===id?next:p),undo:undoable?{before,revision:next.updatedAt}:null};
+  });
   return {
     projects: [],
-    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet', template = null, sourceType = 'tor', sourceTable = null }) {
+    undo:null,
+    undoLast(id){const p=get().projects.find(p=>p.id===id),restored=recoverMetadata(p,get().undo);edit(id,()=>restored);},
+    createProject({ name, torDocId = null, torFilename = '', requirements = [], unreadablePages = [], mode = 'manual', domain = 'Internet', template = null, sourceType = 'tor', sourceTable = null,sourceWarnings=[],sourceUnresolvedRows=[] }) {
       const id = newId();
       const distinct = uniqueRequirements(requirements);
-      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, template, sourceType, sourceTable, rows: {} });
+      const project = migrateProject({ id, name: name.trim() || 'โครงการใหม่', createdAt: new Date().toISOString(), torDocId, torFilename, requirements: distinct, unreadablePages, mode, domain, template, sourceType, sourceTable,sourceWarnings,sourceUnresolvedRows,sourceCoveragePending:sourceWarnings.length>0||sourceUnresolvedRows.length>0, rows: {} });
       set(state => ({ projects: [project, ...state.projects] }));
       return id;
     },
@@ -30,29 +40,26 @@ export const useProjectStore = create()(persist((set, get) => {
     deleteProject(id) { set(state => ({ projects: state.projects.filter(p => p.id !== id) })); },
     addRequirements(id, incoming, ocrPage = null) {
       const project = get().projects.find(p => p.id === id);
-      const additions = uniqueRequirements(incoming, project.requirements).map(r => ({ ...r, reviewed: Boolean(r.reviewed) }));
-      edit(id, p => ({ ...p, requirements: [...p.requirements, ...additions], rows: { ...p.rows, ...Object.fromEntries(additions.map(r => [r.id, emptyResponse(r.id)])) }, unreadablePages: p.unreadablePages.filter(n => n !== ocrPage), ocrPages: ocrPage ? [...new Set([...p.ocrPages, ocrPage])] : p.ocrPages }));
+      const additions = uniqueRequirements(incoming, project.requirements).map(r => ({...r,reviewed:false}));
+      edit(id,p=>appendRequirements(p,incoming,{ocrPage}));
       return additions;
     },
     updateRequirement(id, reqId, patch) {
-      edit(id, p => {
-        const current = p.requirements.find(r => r.id === reqId);
-        const nextId = patch.id?.trim() || reqId;
-        if(nextId.length>120||['__proto__','constructor','prototype'].includes(nextId)||/[\u0000-\u001f]/.test(nextId))throw new Error('เลขข้อไม่ถูกต้อง');
-        if (nextId !== reqId && p.requirements.some(r => r.id === nextId)) throw new Error('เลขข้อ TOR ซ้ำ');
-        if (!patch.textSnapshot?.trim()) throw new Error('ต้องมีข้อความ TOR');
-        const next = { ...current, ...patch, id: nextId, reviewed: Boolean(patch.reviewed) };
-        if (nextId !== reqId) delete next.duplicateOf;
-        const rows = invalidate(p.rows, [reqId]);
-        rows[nextId] = { ...rows[reqId], requirementId: nextId };
-        if (nextId !== reqId) delete rows[reqId];
-        return { ...p, requirements: p.requirements.map(r => r.id === reqId ? next : r), rows, evidence: p.evidence.map(mark => ({ ...mark, requirementIds: linkedRequirements(mark).map(n => n === reqId ? nextId : n) })) };
-      });
+      edit(id,p=>replaceRequirement(p,reqId,patch),true);
     },
     deleteRequirement(id, reqId) {
-      edit(id, p => {
-        const rows = { ...p.rows }; delete rows[reqId];
-        return { ...p, requirements: p.requirements.filter(r => r.id !== reqId), rows, evidence: p.evidence.map(m => ({ ...m, requirementIds: linkedRequirements(m).filter(n => n !== reqId) })).filter(m => m.requirementIds.length) };
+      edit(id,p=>removeRequirement(p,reqId),true);
+    },
+    resolveTorPage(id,page,options){edit(id,p=>resolveSourcePage(p,page,options));},
+    confirmSourceCoverage(id,{confirmed,reason}){if(confirmed!==true||!String(reason||'').trim())throw new Error('ตรวจต้นฉบับทุกแถวและระบุผลการตรวจความครบถ้วนก่อน');edit(id,p=>({...p,sourceCoveragePending:false,sourceCoverageResolution:{reason:String(reason).trim(),confirmedAt:new Date().toISOString()},rows:invalidate(p.rows,p.requirements.map(r=>r.id))}));},
+    updateProduct(id,itemId,patch){edit(id,p=>updateOffering(p,itemId,patch),true);},
+    updateDocument(id,docId,patch){edit(id,p=>updateDocumentMetadata(p,docId,patch),true);},
+    acceptSourceCorrection(id,reqId,patch,{confirmed,expectedText}={}){
+      if(!confirmed)throw new Error('ยืนยันข้อความที่เสนอเทียบต้นฉบับก่อนใช้');
+      edit(id,p=>{
+        if(p.requirements.find(r=>r.id===reqId)?.textSnapshot!==expectedText)throw new Error('ข้อความต้นฉบับในโครงการเปลี่ยนแล้ว กรุณาอ่านใหม่');
+        const changed=replaceRequirement(p,reqId,patch);
+        return replaceRequirement(changed,patch.id||reqId,{reviewed:true});
       });
     },
     addProduct(id, item) {
@@ -61,14 +68,14 @@ export const useProjectStore = create()(persist((set, get) => {
       return itemId;
     },
     removeProduct(id, itemId) {
-      edit(id, p => ({ ...p, products: p.products.filter(i => i.id !== itemId), docs: p.docs.map(d => ({ ...d, itemIds: d.itemIds.filter(n => n !== itemId) })), rows: Object.fromEntries(Object.entries(p.rows).map(([key, r]) => [key, r.itemIds.includes(itemId) ? { ...r, itemIds: r.itemIds.filter(n => n !== itemId), comparison: STATUS.pending, assessment: null } : r])) }));
+      edit(id,p=>removeOffering(p,itemId),true);
     },
     addDocument(id, document) {
       if (!eligibleDocument(document)) throw new Error('กรุณากำหนดประเภทเอกสารหลักฐาน');
       edit(id, p => ({ ...p, docs: [...p.docs, document] }));
     },
     removeDocument(id, docId) {
-      edit(id, p => ({ ...p, docs: p.docs.filter(d => d.id !== docId), rows: invalidate(p.rows, p.evidence.filter(m => m.docId === docId).flatMap(linkedRequirements)), evidence: p.evidence.filter(m => m.docId !== docId) }));
+      edit(id,p=>removeDocumentMetadata(p,docId),true);
     },
     addEvidence(id, mark) {
       const evidenceId = newId();
@@ -76,11 +83,7 @@ export const useProjectStore = create()(persist((set, get) => {
       return evidenceId;
     },
     updateEvidence(id, evidenceId, patch) {
-      edit(id, p => {
-        const mark = p.evidence.find(m => m.id === evidenceId);
-        const next = { ...mark, ...patch };
-        return { ...p, evidence: p.evidence.map(m => m.id === evidenceId ? next : m), rows: invalidate(p.rows, [...linkedRequirements(mark), ...linkedRequirements(next)]) };
-      });
+      edit(id,p=>updateEvidenceMark(p,evidenceId,patch),true);
     },
     removeEvidence(id, evidenceId, reqId) {
       edit(id, p => {
@@ -88,7 +91,7 @@ export const useProjectStore = create()(persist((set, get) => {
         if (!mark) return p;
         const remaining = reqId ? linkedRequirements(mark).filter(n => n !== reqId) : [];
         return { ...p, evidence: p.evidence.flatMap(m => m.id !== evidenceId ? [m] : remaining.length ? [{ ...m, requirementIds: remaining }] : []), rows: invalidate(p.rows, reqId ? [reqId] : linkedRequirements(mark)) };
-      });
+      },true);
     },
     setRow(id, reqId, patch) {
       edit(id, p => {
@@ -111,7 +114,7 @@ export const useProjectStore = create()(persist((set, get) => {
         for (const mark of candidates) evidence = mergeMark({ ...p, evidence }, { ...mark, id: newId(), requirementIds: [reqId] });
         const row = { ...p.rows[reqId], assessment, proposal: p.rows[reqId].proposal || proposal, comparison: STATUS.pending, decisionSource: null };
         const result = { ...p, evidence, rows: { ...p.rows, [reqId]: row } };
-        if ((row.mode || p.mode) === 'auto' && !p.unreadablePages.length && p.requirements.every(r=>r.reviewed)) {
+        if ((row.mode || p.mode) === 'auto' && !p.sourceCoveragePending && !p.unreadablePages.length && p.requirements.every(r=>r.reviewed)) {
           if (assessment.status === 'fail') {row.comparison = STATUS.fail;row.decisionSource='auto';}
           if (assessment.status === 'pass' && !passProblems(result, reqId).length) {row.comparison = STATUS.pass;row.decisionSource='auto';}
         }

@@ -3,10 +3,10 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {useProjectStore} from '@/store/projectStore';
-import {STATUS,evidenceFor,linkedRequirements,exportProblems,rowMode,passProblems} from '@/lib/projectModel.mjs';
+import {STATUS,evidenceFor,linkedRequirements,exportProblems} from '@/lib/projectModel.mjs';
 import {PRIORITIES} from '@/lib/complianceRules.mjs';
 import {assessClause,textInBox} from '@/lib/evidenceSearch.mjs';
-import {parsePages} from '@/lib/torModel.mjs';
+import {SourcePageTools} from './SourcePageTools';
 import {getFile,putFile} from '@/lib/localFiles';
 import {downloadBlob} from '@/lib/download';
 import {ClauseResponse} from './ClauseResponse';
@@ -15,6 +15,9 @@ import {WorkspaceDialog} from './WorkspaceDialog';
 import {AiSettingsButton} from './AiSettings';
 import {clauseFingerprint} from '@/lib/aiIntegrity.mjs';
 import {aiSession} from '@/lib/aiSession.mjs';
+import {workflowSummary,planBatch} from '@/lib/workflowModel.mjs';
+import {EvidenceEditor} from './EvidenceEditor';
+const ReadingRepair=dynamic(()=>import('./ReadingRepair').then(m=>m.ReadingRepair));
 const PdfStage=dynamic(()=>import('./PdfStage'),{ssr:false,loading:()=> <div className="document-empty">กำลังเปิดเอกสาร…</div>});
 const LibraryManager=dynamic(()=>import('./LibraryManager').then(m=>m.LibraryManager));
 const TemplateSettings=dynamic(()=>import('./TemplateSettings').then(m=>m.TemplateSettings));
@@ -35,11 +38,12 @@ export function ProjectClient({projectId}){
   const [dialog,setDialog]=useState(null),[reviewOpen,setReviewOpen]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(false);
   const [filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[tableWidth,setTableWidth]=useState(40),[middleWidth,setMiddleWidth]=useState(30);
   const [box,setBox]=useState(null),[quote,setQuote]=useState(''),[quoteMethod,setQuoteMethod]=useState('text'),[quoteReviewed,setQuoteReviewed]=useState(false),[printedPage,setPrintedPage]=useState(''),[selectedMark,setSelectedMark]=useState(null);
-  const [ocrPage,setOcrPage]=useState(1),[ocrDraft,setOcrDraft]=useState(''),[ocrDraftPage,setOcrDraftPage]=useState(null);
+  const [job,setJob]=useState(null);
+  const jobEpoch=useRef(0),undo=useProjectStore(s=>s.undo);
   const pendingReference=useRef(null);
   const activeRequirement=useRef(null);
   const currentCapture=useRef(null);
-  currentCapture.current={reqId:project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id,view,box,ocrPage,torDocId:project?.torDocId};
+  currentCapture.current={reqId:project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id,view,box,torDocId:project?.torDocId};
   useEffect(()=>{
     const open=event=>{
       const detail=event.detail;
@@ -50,6 +54,7 @@ export function ProjectClient({projectId}){
     window.addEventListener('tor-open-ai-source',open);return()=>window.removeEventListener('tor-open-ai-source',open);
   },[projectId,project?.docs]);
   useEffect(()=>setMounted(true),[]);
+  useEffect(()=>()=>{jobEpoch.current++;aiSession.cancelJobs();},[]);
   useEffect(()=>{const fail=()=>{setMessage('พื้นที่เก็บข้อมูลเต็มหรือถูกปิด ส่งออกโครงการเพื่อสำรองงาน');setError(true);};window.addEventListener('tor-storage-error',fail);return()=>window.removeEventListener('tor-storage-error',fail);},[]);
   const reqId=project?.requirements.some(r=>r.id===selected)?selected:project?.requirements[0]?.id;
   const requirement=project?.requirements.find(r=>r.id===reqId);
@@ -67,7 +72,7 @@ export function ProjectClient({projectId}){
   useEffect(()=>{
     let cancelled=false;
     if(!project?.torDocId)return;
-    getFile(project.torDocId).then(file=>{if(!cancelled&&file)setTorCount(file.pageTexts?.length||Math.max(1,...project.requirements.map(r=>r.sourcePage||1),...project.unreadablePages));});
+    getFile(project.torDocId).then(file=>{if(!cancelled&&file)setTorCount(file.pageTexts?.length||Math.max(1,...project.requirements.map(r=>r.sourcePage||1),...project.unreadablePages));}).catch(e=>{if(!cancelled){setMessage(e.message||'เปิดพื้นที่เก็บไฟล์ไม่ได้');setError(true);}});
     return()=>{cancelled=true;};
   },[project?.torDocId,project?.requirements,project?.unreadablePages]);
   useEffect(()=>{
@@ -86,6 +91,17 @@ export function ProjectClient({projectId}){
     return (filter==='all'||(filter==='unreviewed'?!r.reviewed:status===STATUS[filter]))&&(!query||[r.id,r.textSnapshot,project.rows[r.id]?.proposal].join(' ').toLowerCase().includes(query.toLowerCase()));
   })||[],[project,filter,query]);
   const counts=useMemo(()=>Object.fromEntries(Object.entries(STATUS).map(([key,value])=>[key,project?.requirements.filter(r=>project.rows[r.id]?.comparison===value).length||0])),[project]);
+  const workflow=useMemo(()=>project?workflowSummary(project):null,[project]);
+  function cancelJob(){jobEpoch.current++;aiSession.cancelJobs();setJob(v=>v?{...v,cancelled:true}:null);}
+  function nextTask(){
+    const next=workflow.next;setFilter('all');setQuery('');if(next.id)setSelected(next.id);
+    if(['add','pages'].includes(next.action))setDialog('tor');
+    else if(next.action==='review')setReviewOpen(true);
+    else if(next.action==='library')setDialog('library');
+    else if(next.action==='search')assess(next.id);
+    else if(next.action==='proof'){const mark=evidenceFor(project,next.id).find(m=>m.reviewed!==true);if(mark){pendingReference.current=mark;openMark(mark);}}
+    else setMessage(next.action==='export'?'ตารางพร้อมตรวจครั้งสุดท้าย เลือกรูปแบบส่งออกด้านบน':'ตรวจคำตอบและผลในแผงใต้ตาราง');
+  }
   async function readIndexed(id){
     let file=await getFile(id);
     if(file&&(!file.pages?.length)){
@@ -94,39 +110,43 @@ export function ProjectClient({projectId}){
   }
   async function onBox(nextBox){
     setBox(nextBox);setSelectedMark(null);setQuote('');setQuoteReviewed(false);setQuoteMethod('text');
-    if(nextBox&&view.docId)await run(async()=>{const file=await readIndexed(view.docId);const text=textInBox(file?.pages?.find(p=>p.page===view.page),nextBox);setQuote(text);setQuoteReviewed(Boolean(text));},'');
+    if(nextBox&&view.docId)await run(async()=>{const capture={docId:view.docId,page:view.page,box:nextBox};const file=await readIndexed(capture.docId);if(currentCapture.current.view.docId!==capture.docId||currentCapture.current.view.page!==capture.page||JSON.stringify(currentCapture.current.box)!==JSON.stringify(capture.box))return;const text=textInBox(file?.pages?.find(p=>p.page===capture.page),nextBox);setQuote(text);},'');
   }
   function openMark(mark){
     setView({docId:mark.docId,page:mark.pdfPage,focus:mark.box});setSelectedMark(mark.id);setBox(null);
   }
   async function assess(id){
+    const epoch=jobEpoch.current;
     await run(async()=>{
       const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);
       const fingerprint=clauseFingerprint(snapshot,id);
       const {assessment,candidates,proposal}=await assessClause(snapshot,id,readIndexed);
+      if(epoch!==jobEpoch.current)throw new Error('ยกเลิกการค้นหลักฐานแล้ว');
       if(clauseFingerprint(useProjectStore.getState().projects.find(p=>p.id===projectId),id)!==fingerprint)throw new Error('ข้อมูลข้อนี้เปลี่ยนระหว่างประเมิน กรุณาประเมินใหม่');
       actions.applyAssessment(projectId,id,assessment,candidates,proposal);
       const first=evidenceFor(useProjectStore.getState().projects.find(p=>p.id===projectId),id)[0];if(first&&id===activeRequirement.current)openMark(first);
     },'ประเมินแล้ว · ตรวจเหตุผลและหลักฐานของแต่ละเงื่อนไข');
   }
   async function assessAll(){
+    const epoch=++jobEpoch.current;
     await run(async()=>{
       const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);
-      if(snapshot.unreadablePages.length||snapshot.requirements.some(r=>!r.reviewed))throw new Error('ต้องตรวจ TOR ครบทุกข้อและทุกหน้าก่อน Auto ทั้งโครงการ');
+      const plan=planBatch(snapshot);setJob({done:0,total:plan.ready.length,skipped:plan.skipped});
+      if(!plan.ready.length)throw new Error(plan.skipped.map(s=>'ข้อ '+s.id+': '+s.reason).join(' · ')||'ยังไม่มีข้อ TOR');
       let count=0;
-      for(const req of snapshot.requirements){
+      for(const id of plan.ready){
+        if(epoch!==jobEpoch.current)throw new Error('ยกเลิกแล้ว ผลที่ทำเสร็จยังอยู่ในโครงการ');
         const current=useProjectStore.getState().projects.find(p=>p.id===projectId);
-        if(rowMode(current,req.id)!=='auto'||(!current.rows[req.id].itemIds.length&&current.rows[req.id].scope!=='bidder'))continue;
-        const fingerprint=clauseFingerprint(current,req.id);
-        const result=await assessClause(current,req.id,readIndexed);
-        if(clauseFingerprint(useProjectStore.getState().projects.find(p=>p.id===projectId),req.id)!==fingerprint)throw new Error('ข้อมูลข้อ '+req.id+' เปลี่ยนระหว่างประเมิน กรุณาประเมินใหม่');
-        actions.applyAssessment(projectId,req.id,result.assessment,result.candidates,result.proposal);count++;
+        const fingerprint=clauseFingerprint(current,id);
+        const result=await assessClause(current,id,readIndexed);
+        if(epoch!==jobEpoch.current)throw new Error('ยกเลิกแล้ว ผลข้อนี้ไม่ได้บันทึก');
+        if(clauseFingerprint(useProjectStore.getState().projects.find(p=>p.id===projectId),id)!==fingerprint)throw new Error('ข้อมูลข้อ '+id+' เปลี่ยนระหว่างค้น กรุณาค้นใหม่');
+        actions.applyAssessment(projectId,id,result.assessment,result.candidates,result.proposal);count++;setJob({done:count,total:plan.ready.length,skipped:plan.skipped});
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-      if(!count)throw new Error('ยังไม่มีข้อที่เลือกโหมด Auto และสินค้า/บริการไว้');
       const latest=useProjectStore.getState().projects.find(p=>p.id===projectId);
       const first=evidenceFor(latest,activeRequirement.current)[0];if(first)openMark(first);
-    },'ประเมินข้อที่ใช้ Auto แล้ว ข้อที่ยังไม่มีหลักฐานคงสถานะรอตรวจ');
+    },'ค้นด้วยกฎในโค้ดแล้ว ตรวจข้อความที่อ้างก่อนยืนยันผล');
   }
   async function ocrSelection(){
     if(!box||!doc)return;
@@ -151,7 +171,7 @@ export function ProjectClient({projectId}){
     event.preventDefault();
     await run(async()=>{
       if(!box||!doc||!reqId)throw new Error('เลือกข้อ TOR และลากกรอบหลักฐานก่อน');
-      if(!quote.trim())throw new Error('อ่านข้อความจากกรอบหรือใช้ OCR ก่อนบันทึก');
+      if(!quote.trim())throw new Error('กรอกข้อความที่เห็นในกรอบหรือใช้ OCR ก่อนบันทึก');
       actions.addEvidence(projectId,{docId:doc.id,pdfPage:view.page,box,quote:quote.trim(),keyword:quote.trim().slice(0,80),sourceMethod:quoteMethod,reviewed:quoteReviewed,printedPage:printedPage.trim(),requirementIds:[reqId]});
       setBox(null);setQuote('');setPrintedPage('');
     },'ผูกหลักฐานแล้ว');
@@ -171,28 +191,19 @@ export function ProjectClient({projectId}){
   async function exportBundle(){
     await run(async()=>{const {exportProjectArchive}=await import('@/lib/projectArchive');const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);downloadBlob(await exportProjectArchive(snapshot),'tor-project.torproj');},'ส่งออกโครงการพร้อมเอกสารต้นฉบับครบแล้ว');
   }
-  async function runTorOcr(){
-    const target=ocrPage,source=project.torDocId;
-    await run(async()=>{
-      const ticket=aiSession.captureFor('ocr');
-      const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบ TOR ต้นฉบับ');
-      const [{ocrPdfPage},{recognizeImage}]=await Promise.all([import('@/lib/pdfBrowser'),import('@/lib/ocrBrowser')]);
-      const result=await recognizeImage(await ocrPdfPage(file.blob,target),ticket);
-      if(currentCapture.current.ocrPage!==target||currentCapture.current.torDocId!==source)throw new Error('เปลี่ยนหน้า/ต้นฉบับแล้ว ผล OCR เดิมถูกยกเลิก');
-      setOcrDraft(result.text);setOcrDraftPage(target);
-    },'ตรวจแก้ OCR เทียบต้นฉบับก่อนเพิ่มข้อ');
-  }
   if(!mounted)return <div className="loading-workspace">กำลังเปิดพื้นที่ทำงาน…</div>;
   if(!project)return <div className="loading-workspace">ไม่พบโครงการในเครื่องนี้ <Link href="/">กลับหน้าโครงการ</Link></div>;
   return <div className="workbench">
     <aside className="workspace-rail"><Link href="/" className="rail-brand" aria-label="โครงการทั้งหมด">1<span>to</span>All</Link><button onClick={()=>setDialog('library')} title="สินค้า บริการ และไฟล์"><b>▧</b><span>ไฟล์</span></button><button onClick={()=>setDialog('tor')} title="นำเข้า OCR และเพิ่มข้อ"><b>≡</b><span>ข้อ TOR</span></button><button onClick={()=>setDialog('template')} title="แม่แบบส่งออก"><b>▤</b><span>แม่แบบ</span></button><button onClick={()=>setDialog('settings')} title="ตั้งค่าโครงการ"><b>⚙</b><span>ตั้งค่า</span></button><div className="rail-bottom">LOCAL<br/>เก็บในเครื่อง</div></aside>
     <div className="workspace-main">
-      <header className="workspace-header"><div><div className="workspace-breadcrumb"><Link href="/">โครงการ</Link><span>/</span><span>{project.domain}</span></div><h1>{project.name}</h1></div><div className="workspace-menu"><AiSettingsButton/><select aria-label="โหมดหลักของโครงการ" value={project.mode} onChange={e=>actions.settings(projectId,{mode:e.target.value})}><option value="manual">ตรวจยืนยันเอง</option><option value="auto">Auto ตามกฎ</option></select><button className="outline-button" disabled={busy} onClick={assessAll}>ประเมิน Auto</button><button className="outline-button" disabled={busy} onClick={exportBundle}>สำรองโครงการ</button><details className="export-menu"><summary className="brand-button">ส่งออกตาราง ↓</summary><div>{[['pdf','PDF'],['docx','Word DOCX'],['xlsx','Excel XLSX']].map(([f,label])=><button key={f} disabled={busy} onClick={()=>exportTable(f)}>{label}</button>)}</div></details></div></header>
+      <header className="workspace-header"><div><div className="workspace-breadcrumb"><Link href="/">โครงการ</Link><span>/</span><span>{project.domain}</span></div><h1>{project.name}</h1></div><div className="workspace-menu"><AiSettingsButton/><select aria-label="โหมดหลักของโครงการ" value={project.mode} onChange={e=>actions.settings(projectId,{mode:e.target.value})}><option value="manual">ตรวจยืนยันเอง</option><option value="auto">Auto ตามกฎ</option></select><button className="outline-button" disabled={busy} onClick={assessAll}>ค้นหลักฐานทุกข้อพร้อมทำ</button><button className="outline-button" disabled={busy} onClick={exportBundle}>สำรองโครงการ</button><details className="export-menu"><summary className="brand-button">ส่งออกตาราง ↓</summary><div>{[['pdf','PDF'],['docx','Word DOCX'],['xlsx','Excel XLSX']].map(([f,label])=><button key={f} disabled={busy} onClick={()=>exportTable(f)}>{label}</button>)}</div></details></div></header>
       <div className="workspace-status"><div className="status-counts"><span><i className="check-dot pass"/>{counts.pass} Comply</span><span><i className="check-dot pending"/>{counts.pending} รอตรวจ</span><span><i className="check-dot fail"/>{counts.fail} ไม่ Comply</span></div><span>{project.requirements.filter(r=>r.reviewed).length}/{project.requirements.length} ตรวจ TOR แล้ว · ใช้กฎในโค้ด</span></div>
       {message&&<div role={error?'alert':'status'} className={'workspace-notice '+(error?'notice-error':'')}><span>{message}</span><button aria-label="ปิดข้อความ" onClick={()=>setMessage('')}>×</button></div>}
+      <div className="copilot-bar"><div><strong>Copilot · ใช้กฎในโค้ด</strong><span>{workflow.next.label}</span></div><button className="outline-button" disabled={busy} onClick={nextTask}>ทำขั้นตอนถัดไป</button>{busy&&<button className="text-button danger" onClick={cancelJob}>ยกเลิกงานที่กำลังทำ</button>}{undo?.before.id===projectId&&<button className="text-button" disabled={busy} onClick={()=>run(async()=>actions.undoLast(projectId),'ย้อนกลับรายการล่าสุดแล้ว')}>ย้อนกลับรายการล่าสุด</button>}{job&&<details><summary>{job.cancelled?'ยกเลิก':job.done+'/'+job.total+' ข้อ'} · ข้าม {job.skipped.length} ข้อ</summary>{job.skipped.map(s=><p key={s.id}>ข้อ {s.id}: {s.reason}</p>)}</details>}</div>
       <div className="workspace-panes" style={{gridTemplateColumns:'minmax(340px,'+tableWidth+'fr) 7px minmax(240px,'+middleWidth+'fr) 7px minmax(240px,'+(100-tableWidth-middleWidth)+'fr)'}}>
         <section className="work-pane table-pane"><div className="pane-title"><div><span className="pane-index">01</span><h2>ตาราง Comply</h2></div><span>{visible.length} ข้อ</span></div>
           <div className="table-toolbar"><input aria-label="ค้นหาข้อ TOR" placeholder="ค้นเลขข้อหรือข้อความ…" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="กรองสถานะ" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">ทุกข้อ</option><option value="pending">รอตรวจ</option><option value="pass">Comply</option><option value="fail">ไม่ Comply</option><option value="unreviewed">ยังไม่ตรวจ TOR</option></select></div>
+          <div className="clause-tools"><button className="text-button" disabled={busy} onClick={()=>setDialog('tor')}>+ เพิ่มข้อ</button><button className="text-button" disabled={busy||!requirement} onClick={()=>setReviewOpen(true)}>แก้ / ตรวจข้อ</button><button className="text-button" disabled={busy||!requirement} onClick={()=>setDialog('repair')}>ตรวจแก้การอ่าน</button><button className="text-button danger" disabled={busy||!requirement} onClick={()=>{if(window.confirm('ลบข้อ '+reqId+' และยกเลิกการผูกหลักฐานเฉพาะข้อนี้?'))run(async()=>{actions.deleteRequirement(projectId,reqId);setSelected(null);},'ลบข้อแล้ว · ย้อนกลับรายการล่าสุดได้');}}>ลบข้อ</button></div>
           <div className="comply-scroll"><table className="comply-grid"><thead><tr><th>ข้อ / รายละเอียด TOR</th><th>รายละเอียดที่เสนอ</th><th>ผลเปรียบเทียบ</th><th>เอกสารอ้างอิง</th></tr></thead><tbody>{visible.map(req=>{
             const row=project.rows[req.id],refs=evidenceFor(project,req.id),status=row?.comparison||STATUS.pending;
             return <tr key={req.id} className={req.id===reqId?'selected-row':''} aria-selected={req.id===reqId}><td><button className="clause-select" onClick={()=>setSelected(req.id)}><strong>{req.id}<span className={req.reviewed?'reviewed-label':'unreviewed-label'}>{req.reviewed?'ตรวจแล้ว':'ตรวจ TOR'}</span></strong><span>{req.textSnapshot}</span></button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}>{row?.proposal||<span className="muted">เลือกสินค้า/บริการแล้วเขียนคำตอบ</span>}</button></td><td><button className="cell-select" onClick={()=>setSelected(req.id)}><span className={'status-pill '+(status===STATUS.pass?'pass':status===STATUS.fail?'fail':'pending')}>{status===STATUS.pass?'Comply':status===STATUS.fail?'ไม่ Comply':'รอตรวจ'}</span><small>{row?.decisionSource==='auto'?'Auto':row?.decisionSource==='manual'?'ยืนยันเอง':''}</small></button></td><td>{refs.length?refs.map(mark=><button key={mark.id} className="reference-cell" onClick={()=>{if(req.id!==reqId)pendingReference.current=mark;setSelected(req.id);openMark(mark);}} title={project.docs.find(d=>d.id===mark.docId)?.name}>{project.docs.find(d=>d.id===mark.docId)?.name}<small>หน้า {mark.printedPage||mark.pdfPage}</small></button>):<span className="empty-reference">ยังไม่ผูกหลักฐาน</span>}</td></tr>;
@@ -202,34 +213,32 @@ export function ProjectClient({projectId}){
         <Splitter label="ปรับความกว้างตาราง" value={tableWidth} onChange={v=>setTableWidth(Math.max(28,Math.min(50,v)))}/>
         <section className="work-pane"><div className="pane-title"><div><span className="pane-index">02</span><h2>TOR ต้นฉบับ</h2></div><button className="text-button" onClick={()=>setReviewOpen(v=>!v)} disabled={!requirement}>{requirement?.reviewed?'ตรวจอีกครั้ง':'ตรวจข้อความ'}</button></div>
           <div className="document-caption" title={project.torFilename}>{project.torFilename||'ข้อกำหนดที่กรอกเอง'}<span>ข้อ {reqId||'—'}</span></div>
-          {project.torDocId&&/\.pdf$/i.test(project.torFilename)?<><Pager label="TOR" page={torPage} count={torCount} onChange={setTorPage}/><PdfStage docId={project.torDocId} pageNumber={torPage} resetToken={reqId}/></>:<div className="tor-text-preview"><p className="muted">{project.sourceType==='comply-table'?'ข้อกำหนดที่อ่านจากคอลัมน์ TOR ในตารางต้นฉบับ · เปิดไฟล์เดิมได้จากเมนูข้อ TOR':'ข้อความจาก DOCX / ข้อที่กรอกเอง · DOCX ไม่มีเลขหน้า PDF ต้นฉบับ'}</p>{requirement?<><h3>ข้อ {reqId}</h3><p>{requirement.textSnapshot}</p></>:<p>เลือกข้อ TOR</p>}</div>}
-          {reviewOpen&&requirement&&<div className="inline-review"><RequirementEditor key={reqId} requirement={requirement} onSave={patch=>{actions.updateRequirement(projectId,reqId,patch);setSelected(patch.id);setReviewOpen(false);setMessage('บันทึกและยืนยัน TOR แล้ว');}} onDelete={()=>{actions.deleteRequirement(projectId,reqId);setSelected(null);}}/></div>}
+          {project.torDocId&&/\.pdf$/i.test(project.torFilename)?<><Pager label="TOR" page={torPage} count={torCount} onChange={setTorPage}/><PdfStage docId={project.torDocId} pageNumber={torPage} resetToken={reqId} focusBox={requirement?.sourceRegions?.find(r=>r.page===torPage)?.box}/></>:<div className="tor-text-preview"><p className="muted">{project.sourceType==='comply-table'?'ข้อกำหนดที่อ่านจากคอลัมน์ TOR ในตารางต้นฉบับ · เปิดไฟล์เดิมได้จากเมนูข้อ TOR':'ข้อความจาก DOCX / ข้อที่กรอกเอง · DOCX ไม่มีเลขหน้า PDF ต้นฉบับ'}</p>{requirement?<><h3>ข้อ {reqId}</h3><p>{requirement.textSnapshot}</p></>:<p>เลือกข้อ TOR</p>}</div>}
+          {reviewOpen&&requirement&&<div className="inline-review"><RequirementEditor key={reqId+':'+(requirement.sourceCorrections?.length||0)} requirement={requirement} onSave={patch=>{actions.updateRequirement(projectId,reqId,patch);const latest=useProjectStore.getState().projects.find(p=>p.id===projectId).requirements.find(r=>r.id===patch.id);setSelected(patch.id);setReviewOpen(!latest.reviewed);setMessage(latest.reviewed?'ตรวจ TOR แล้ว':'บันทึกข้อความใหม่แล้ว ตรวจยืนยันข้อความที่บันทึกอีกครั้ง');}} onDelete={()=>{actions.deleteRequirement(projectId,reqId);setSelected(null);}}/></div>}
         </section>
         <Splitter label="ปรับความกว้าง TOR" value={middleWidth} onChange={v=>setMiddleWidth(Math.max(20,Math.min(45,v)))}/>
         <section className="work-pane evidence-pane"><div className="pane-title"><div><span className="pane-index">03</span><h2>หลักฐาน</h2></div><button className="text-button" onClick={()=>setDialog('library')}>+ เพิ่มไฟล์</button></div>
           <div className="evidence-picker"><select aria-label="เอกสารหลักฐาน" disabled={busy} value={view.docId||''} onChange={e=>{setView({docId:e.target.value||null,page:1,focus:null});setBox(null);setSelectedMark(null);}}><option value="">ยังไม่ผูกหลักฐาน · เลือกไฟล์เพื่อเพิ่ม</option>{project.docs.map(d=><option value={d.id} key={d.id}>{d.name}</option>)}</select></div>
-          {marks.length>0&&<div className="evidence-tabs">{marks.map((mark,i)=><button className={mark.id===selectedMark?'active':''} key={mark.id} onClick={()=>openMark(mark)} title={project.docs.find(d=>d.id===mark.docId)?.name}>{i+1} · หน้า {mark.printedPage||mark.pdfPage}{mark.sourceMethod==='ocr'&&!mark.reviewed?' · ตรวจ OCR':''}</button>)}</div>}
+          {marks.length>0&&<div className="evidence-tabs">{marks.map((mark,i)=><button className={mark.id===selectedMark?'active':''} key={mark.id} onClick={()=>openMark(mark)} title={project.docs.find(d=>d.id===mark.docId)?.name}>{i+1} · หน้า {mark.printedPage||mark.pdfPage}{mark.reviewed!==true?' · รอตรวจ':''}</button>)}</div>}
           {doc&&<Pager label="หลักฐาน" page={view.page} count={doc.pageCount} onChange={page=>{setView(v=>({...v,page,focus:null}));setBox(null);setSelectedMark(null);}}/>}
           <PdfStage docId={doc?.id} pageNumber={view.page} marks={pageMarks} resetToken={reqId+':'+project.evidence.length} onBox={busy?undefined:onBox} focusBox={view.focus}/>
-          {box&&<form className="mark-editor" onSubmit={saveMark}><div className="pane-subheading"><strong>หลักฐานใหม่ · ข้อ {reqId}</strong><button className="text-button" disabled={busy} type="button" onClick={ocrSelection}>OCR เฉพาะกรอบ</button></div><textarea aria-label="ข้อความหลักฐานที่เลือก" value={quote} readOnly={quoteMethod!=='ocr'} onChange={e=>{setQuote(e.target.value);setQuoteReviewed(false);}} placeholder="หากไม่มีข้อความ กด OCR เฉพาะกรอบ"/><div className="mark-line"><input aria-label="เลขหน้าที่พิมพ์" placeholder="เลขหน้าที่พิมพ์ (ถ้ามี)" value={printedPage} onChange={e=>setPrintedPage(e.target.value)}/>{quoteMethod==='ocr'&&<label><input type="checkbox" checked={quoteReviewed} onChange={e=>setQuoteReviewed(e.target.checked)}/>ตรวจ OCR แล้ว</label>}<button className="brand-button" disabled={busy}>ผูกหลักฐาน</button></div></form>}
-          {selectedEvidence&&!box&&<div className="mark-editor"><div className="pane-subheading"><strong>อ้างอิงข้อ {linkedRequirements(selectedEvidence).join(', ')}</strong><button className="text-button danger" onClick={()=>run(async()=>{actions.removeEvidence(projectId,selectedEvidence.id,reqId);setSelectedMark(null);},'ยกเลิกการผูกกับข้อนี้แล้ว')}>ยกเลิกข้อนี้</button></div><p className="evidence-quote">{selectedEvidence.quote||selectedEvidence.keyword}</p>
-            {selectedEvidence.sourceMethod==='ocr'&&!selectedEvidence.reviewed&&<button className="outline-button" onClick={()=>run(async()=>actions.updateEvidence(projectId,selectedEvidence.id,{reviewed:true}),'ตรวจหลักฐาน OCR แล้ว กรุณาประเมินอีกครั้ง')}>ตรวจข้อความเทียบภาพแล้ว</button>}
-            <details><summary>ใช้หลักฐานจุดนี้กับข้ออื่น</summary><div className="shared-clauses">{project.requirements.map(r=><label key={r.id}><input type="checkbox" checked={linkedRequirements(selectedEvidence).includes(r.id)} onChange={e=>run(async()=>{const ids=e.target.checked?[...linkedRequirements(selectedEvidence),r.id]:linkedRequirements(selectedEvidence).filter(id=>id!==r.id);if(!ids.length)throw new Error('ใช้ปุ่มยกเลิกเพื่อลบการผูกสุดท้าย');actions.updateEvidence(projectId,selectedEvidence.id,{requirementIds:ids});})}/>ข้อ {r.id}</label>)}</div></details>
-          </div>}
-          {doc&&<button className="evidence-export" disabled={busy} onClick={()=>run(async()=>{const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);if(snapshot.evidence.some(m=>m.docId===doc.id&&m.sourceMethod==='ocr'&&!m.reviewed))throw new Error('ตรวจหลักฐาน OCR ก่อนส่งออก');const {exportAnnotatedPdf}=await import('@/lib/exportPdf');downloadBlob(await exportAnnotatedPdf(snapshot,doc.id),'marked-'+doc.name);},'ส่งออกหลักฐานพร้อมไฮไลต์แล้ว')}>↓ PDF หลักฐานพร้อมเลขข้อ</button>}
+          {box&&<form className="mark-editor" onSubmit={saveMark}><div className="pane-subheading"><strong>หลักฐานใหม่ · ข้อ {reqId}</strong><button className="text-button" disabled={busy} type="button" onClick={ocrSelection}>OCR เฉพาะกรอบ</button></div><textarea aria-label="ข้อความหลักฐานที่เลือก" value={quote} onChange={e=>{setQuote(e.target.value);setQuoteMethod('manual');setQuoteReviewed(false);}} placeholder="กรอกข้อความที่เห็นในกรอบ หรือกด OCR เฉพาะกรอบ"/><div className="mark-line"><input aria-label="เลขหน้าที่พิมพ์" placeholder="เลขหน้าที่พิมพ์ (ถ้ามี)" value={printedPage} onChange={e=>setPrintedPage(e.target.value)}/><label><input type="checkbox" checked={quoteReviewed} onChange={e=>setQuoteReviewed(e.target.checked)}/>ตรวจข้อความเทียบภาพแล้ว</label><button className="brand-button" disabled={busy}>ผูกหลักฐาน</button></div></form>}
+          {selectedEvidence&&!box&&<EvidenceEditor key={selectedEvidence.id+':'+selectedEvidence.quote+':'+selectedEvidence.printedPage} project={project} mark={selectedEvidence} reqId={reqId} run={run} busy={busy}/>}
+          {doc&&<button className="evidence-export" disabled={busy} onClick={()=>run(async()=>{const snapshot=useProjectStore.getState().projects.find(p=>p.id===projectId);if(snapshot.evidence.some(m=>m.docId===doc.id&&m.reviewed!==true))throw new Error('ตรวจข้อความหลักฐานที่อ้างก่อนส่งออก');const {exportAnnotatedPdf}=await import('@/lib/exportPdf');downloadBlob(await exportAnnotatedPdf(snapshot,doc.id),'marked-'+doc.name);},'ส่งออกหลักฐานพร้อมไฮไลต์แล้ว')}>↓ PDF หลักฐานพร้อมเลขข้อ</button>}
         </section>
       </div>
       <footer className="workspace-footer"><span>เอกสารอยู่ในเครื่องนี้ · สำรองไฟล์โครงการเพื่อย้ายงาน</span><span>ลากเส้นคั่นเพื่อปรับพื้นที่ · {busy?'กำลังทำงาน…':'พร้อมทำงาน'}</span></footer>
     </div>
-    {dialog&&<WorkspaceDialog title={{library:'สินค้า บริการ และเอกสาร',template:'แม่แบบตารางส่งออก',settings:'ตั้งค่าโครงการ',tor:'นำเข้าและจัดการข้อ TOR'}[dialog]} onClose={()=>{if(!busy)setDialog(null);}} wide={dialog==='library'||dialog==='template'}>
+    {dialog&&<WorkspaceDialog title={{library:'สินค้า บริการ และเอกสาร',template:'แม่แบบตารางส่งออก',settings:'ตั้งค่าโครงการ',tor:'นำเข้าและจัดการข้อ TOR',repair:'ตรวจแก้การอ่านเทียบต้นฉบับ'}[dialog]} onClose={()=>{if(!busy)setDialog(null);}} wide={dialog==='library'||dialog==='template'||dialog==='repair'}>
+      {dialog==='repair'&&requirement&&<ReadingRepair key={reqId} project={project} requirement={requirement} run={run} busy={busy} onAccepted={()=>setDialog(null)}/>}
       {dialog==='library'&&<LibraryManager project={project} run={run} busy={busy} onTemplate={()=>setDialog('template')}/>}
       {dialog==='template'&&<TemplateSettings project={project} run={run} onLibrary={()=>setDialog('library')}/>}
       {dialog==='settings'&&<div className="stack-form"><label className="form-label">ชื่อโครงการ<input className="form-input" value={project.name} maxLength={160} onChange={e=>actions.rename(projectId,e.target.value)}/></label><label className="form-label">ประเภทงาน<select className="form-input" value={project.domain} onChange={e=>actions.settings(projectId,{domain:e.target.value})}>{[...PRIORITIES,'Software','Surveillance','Parking','Room Booking','Access Control','A/V','PBX / IPBX / Hybrid','อื่น ๆ'].map(d=><option key={d}>{d}</option>)}</select></label><p className="notice">ใช้กฎในโค้ดเป็นหลัก · AI/OCR ผ่าน API เป็นตัวเลือกช่วงทดสอบ เปิดจาก AI / API Keys</p><p className="muted">โหมด Auto จะตัดสินเฉพาะเงื่อนไขที่พิสูจน์ได้จากเอกสารของรายการที่เลือก ข้อที่ยังพิสูจน์ไม่ครบจะเป็นรอตรวจ</p></div>}
       {dialog==='tor'&&<div className="stack-form">
         {project.torDocId&&<button className="outline-button" onClick={()=>run(async()=>{const file=await getFile(project.torDocId);if(!file)throw new Error('ไม่พบไฟล์ TOR');downloadBlob(file.blob,project.torFilename);})}>ดาวน์โหลด TOR ต้นฉบับ</button>}
-        {project.unreadablePages.length>0&&<section className="ocr-section"><h3>หน้า TOR ที่ยังต้องอ่าน OCR</h3><p className="muted">{project.unreadablePages.join(', ')}</p><div className="form-grid"><label className="form-label">หน้า PDF<input className="form-input" type="number" min="1" max={torCount} value={ocrPage} disabled={busy} onChange={e=>{setOcrPage(Number(e.target.value));setOcrDraft('');setOcrDraftPage(null);setTorPage(Number(e.target.value));}}/></label><button className="outline-button" disabled={busy} onClick={runTorOcr}>อ่านหน้านี้ด้วย OCR</button></div>
-          {ocrDraftPage!==null&&<form className="stack-form" onSubmit={e=>{e.preventDefault();run(async()=>{if(!ocrDraft.trim())throw new Error('ตรวจและแก้ข้อความก่อน');const parsed=parsePages([{page:ocrDraftPage,text:ocrDraft}],'ocr');actions.addRequirements(projectId,parsed.requirements,ocrDraftPage);setOcrDraft('');setOcrDraftPage(null);},'เพิ่มข้อจาก OCR แล้ว เปิดตรวจข้อความแต่ละข้อเทียบต้นฉบับ');}}><label className="form-label">ข้อความ OCR หน้า {ocrDraftPage}<textarea className="form-input" rows="7" value={ocrDraft} onChange={e=>setOcrDraft(e.target.value)}/></label><button className="dark-button">เพิ่มข้อจากข้อความนี้</button></form>}
-        </section>}
+        {project.sourceWarnings?.length>0&&<details open={project.sourceCoveragePending}><summary>คำเตือนจากการอ่านต้นฉบับ</summary>{project.sourceWarnings.map((w,i)=><p className="notice" key={i}>{w}</p>)}</details>}
+        {project.sourceCoveragePending&&<form className="stack-form resource-editor" onSubmit={e=>{e.preventDefault();const data=new FormData(e.currentTarget);run(async()=>actions.confirmSourceCoverage(projectId,{confirmed:data.get('confirmed')==='on',reason:data.get('reason')}),'ยืนยันความครบถ้วนต้นฉบับแล้ว');}}><strong>ตรวจความครบถ้วนจากไฟล์ต้นฉบับ</strong><p className="muted">เปิดไฟล์เดิม ตรวจทุกตาราง/แผ่นงาน เพิ่มข้อที่ตกหล่นด้วยเครื่องมือด้านล่างก่อนยืนยัน</p><label className="form-label">ผลการตรวจ / แถวที่เพิ่มหรือไม่มีข้อกำหนด<input className="form-input" name="reason" required/></label><label className="intake-confirm"><input type="checkbox" name="confirmed" required/>ตรวจครบทุกข้อและทุกแถวที่เตือนแล้ว</label><button className="brand-button" disabled={busy}>ยืนยันต้นฉบับครบถ้วน</button></form>}
+        {project.torDocId&&/\.pdf$/i.test(project.torFilename)&&<SourcePageTools project={project} count={torCount} run={run} busy={busy} onPage={setTorPage} onAdded={id=>{if(id)setSelected(id);}}/>}
         <form className="stack-form" onSubmit={e=>{e.preventDefault();const form=e.currentTarget,data=new FormData(form);run(async()=>{const id=String(data.get('number')).trim();if(project.requirements.some(r=>r.id===id))throw new Error('เลขข้อซ้ำ');actions.addRequirements(projectId,[{id,title:String(data.get('text')).slice(0,120),textSnapshot:String(data.get('text')),sourcePage:Number(data.get('page'))||null,sourceMethod:'manual',reviewed:false}]);setSelected(id);form.reset();},'เพิ่มข้อ TOR แล้ว');}}>
           <h3>เพิ่มข้อ TOR</h3><div className="form-grid"><label className="form-label">เลขข้อ<input className="form-input" name="number" required pattern="[0-9๐-๙]+([.][0-9๐-๙]+)*" placeholder="5.1"/></label><label className="form-label">หน้า PDF ต้นฉบับ<input className="form-input" name="page" type="number" min="1" max={torCount}/></label></div><label className="form-label">ข้อความตาม TOR<textarea className="form-input" name="text" required rows="4"/></label><button className="dark-button" disabled={busy}>เพิ่มข้อกำหนด</button>
         </form>

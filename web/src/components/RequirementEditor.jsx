@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect,useState } from 'react';
 
 export function RequirementEditor({ requirement, onSave, onDelete }) {
   const [number, setNumber] = useState(requirement.id);
@@ -9,6 +9,7 @@ export function RequirementEditor({ requirement, onSave, onDelete }) {
   const [page, setPage] = useState(requirement.sourcePage || '');
   const [error, setError] = useState('');
   const [reviewed, setReviewed] = useState(Boolean(requirement.reviewed));
+  useEffect(()=>{setReviewed(Boolean(requirement.reviewed));},[requirement.reviewed,requirement.sourceCorrections?.length]);
 
   function submit(event) {
     event.preventDefault();
@@ -26,6 +27,7 @@ export function RequirementEditor({ requirement, onSave, onDelete }) {
     <label className="form-label">ข้อความตาม TOR<textarea className="form-input min-h-32" required value={text} onChange={event => { setText(event.target.value); setReviewed(false); }} /></label>
     <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} />ตรวจเทียบต้นฉบับแล้ว: เลขข้อ ข้อความ ตัวเลข และหน่วยถูกต้อง</label>
     {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+    <p className="muted">การแก้เลขข้อ/ข้อความจะยกเลิกผลเดิม บันทึกข้อความใหม่ก่อน แล้วตรวจยืนยันข้อความที่บันทึกอีกครั้ง</p>
     <button className="dark-button" type="submit">บันทึกข้อ TOR</button>
   </form>;
 }

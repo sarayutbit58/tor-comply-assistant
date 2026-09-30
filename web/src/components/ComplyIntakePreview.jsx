@@ -22,7 +22,7 @@ export function ComplyIntakePreview({prepared,onReady}) {
     try{if(pdfRows?.error)throw new Error(pdfRows.error);return {...extractComplyRequirements(selected,mapping),error:null};}
     catch(error){return {requirements:[],warnings:[],error:error.message};}
   },[selected,mapping,pdfRows]);
-  const ready=useMemo(()=>({main,selected,mapping,requirements:parsed.requirements,warnings:parsed.warnings,error:parsed.error,confirmed,pdfLayout:layout}),[main,selected,mapping,parsed,confirmed,layout]);
+  const ready=useMemo(()=>({main,selected,mapping,requirements:parsed.requirements,warnings:[...(prepared.warnings||[]),...parsed.warnings],unresolvedRows:parsed.unresolvedRows||[],error:parsed.error,confirmed,pdfLayout:layout}),[main,selected,mapping,parsed,confirmed,layout,prepared]);
   useEffect(()=>onReady(ready),[ready,onReady]);
   function choose(id) {
     const table=tables.find(t=>t.id===id);setTableId(id);setMapping(inferSourceMapping(table.headers));

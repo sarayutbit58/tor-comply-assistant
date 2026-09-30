@@ -57,6 +57,13 @@ Implementation keeps pure decisions in lib/*.mjs and browser adapters/UI separat
 - Baseline source audited; historical 79-test result is not a fresh result for this enhancement.
 - No completed implementation criteria or new browser gates claimed yet.
 
+### Implementation checkpoint before browser QA
+
+- Added geometry/critical-reading helpers, decimal DOCX numbering, sparse/merged XLSX safeguards and unresolved-source coverage gates.
+- Added local Thai/English OCR as the keyless default, cancellable workers, manual page transcription and explicit page completion.
+- Added validated domain mutations, source repair preview/acceptance, editable evidence, resource metadata tools, latest-edit recovery, local readiness and sequential cancellable batches on the project route.
+- Fresh command `node --test --test-concurrency=1 --test-reporter=spec web/tests/*.test.mjs`: 160/160 passed. Source syntax parser and `git diff --check` passed. Cloud compile/browser/artifact gates remain pending; this is not final acceptance.
+
 ## Completion audit
 
 Maintain a dated QA record linking each criterion/Uxx to unit output, actual browser behavior or exported artifact. Untested, indirect or weak evidence means incomplete. Accuracy on arbitrary future TORs and absence of all future bugs cannot be guaranteed; preserve explicit limitations.

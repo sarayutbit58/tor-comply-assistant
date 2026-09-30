@@ -33,7 +33,7 @@ export function HomeClient() {
         setPrepared(await readComplyDocument(file));
         return;
       }
-      let requirements=[],unreadablePages=[],pages=[],template=null,sourceTable=null;
+      let requirements=[],unreadablePages=[],pages=[],template=null,sourceTable=null,sourceWarnings=[],sourceUnresolvedRows=[];
       if(sourceType==='comply-table') {
         if(!selection?.confirmed||selection.error||!selection.requirements.length)throw new Error('ตรวจ preview และยืนยันคอลัมน์เลขข้อ/ข้อกำหนดก่อน');
         const {templateForSource}=await import('@/lib/complyBrowser');
@@ -46,20 +46,21 @@ export function HomeClient() {
         const excludedTables=prepared.tables.filter(t=>isComplyTable(t)&&!selection.selected.some(s=>s.id===t.id)).map(t=>t.tableIndex).filter(Number.isInteger);
         template={...base,name:file.name,profile,native:{...base.native,sourceTables:prepared.format==='docx'?selectedTables:undefined,excludedTables,rebuildTable:base.native?.rebuildTable||columns.length!==selection.main.headers.length}};
         requirements=selection.requirements;pages=prepared.pages;
+        sourceWarnings=selection.warnings||[];sourceUnresolvedRows=selection.unresolvedRows||[];
         sourceTable={tableIds:selection.selected.map(t=>t.id),numberColumn:selection.mapping.numberColumn,textColumn:selection.mapping.textColumn,headers:selection.main.headers};
       } else if(file) {
         if(/\.pdf$/i.test(file.name)) {
           const {extractPdf}=await import('@/lib/pdfBrowser');pages=await extractPdf(file);
           ({requirements,unreadablePages}=parsePages(pages));
         } else if(/\.docx$/i.test(file.name)) {
-          const {extractDocx}=await import('@/lib/docxBrowser');({requirements,unreadablePages}=await extractDocx(file));
+          const {extractDocx}=await import('@/lib/docxBrowser');const parsed=await extractDocx(file);({requirements,unreadablePages}=parsed);sourceWarnings=parsed.warnings||[];
         } else throw new Error('TOR ต้นฉบับรองรับ PDF หรือ DOCX');
       }
       if(file) {
         savedId=crypto.randomUUID();await putFile(savedId,file,pages.map(p=>p.text),pages);
         if(template)template.id=savedId;
       }
-      const id=createProject({name,torDocId:savedId,torFilename:file?.name||'',requirements,unreadablePages,template,sourceType,sourceTable});
+      const id=createProject({name,torDocId:savedId,torFilename:file?.name||'',requirements,unreadablePages,template,sourceType,sourceTable,sourceWarnings,sourceUnresolvedRows});
       router.push('/project/'+id);
     } catch(cause) {
       if(savedId&&!useProjectStore.getState().projects.some(p=>projectFileIds(p).includes(savedId)))await deleteFile(savedId).catch(()=>{});
