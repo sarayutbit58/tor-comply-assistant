@@ -2,6 +2,18 @@ import {allowedOpenAiModel,recommendedModels,pickSystemOneModel} from './aiModel
 import {validateDraft,validateSemantic} from './aiIntegrity.mjs';
 const MAX_BODY=3*1024*1024;
 const HEADERS={'Cache-Control':'no-store, max-age=0','Pragma':'no-cache','Vary':'Origin','X-Content-Type-Options':'nosniff'};
+// Public error enums from OpenAI's current error guide; never forward raw messages.
+const ERROR_HINTS={
+  credit_balance_exhausted:'เครดิต API หมด ตรวจยอดคงเหลือใน Billing ขององค์กรที่ออกคีย์',
+  organization_spend_limit_exceeded:'ถึงวงเงินใช้จ่ายขององค์กร ให้ผู้ดูแลตรวจ Organization spend limit',
+  project_spend_limit_exceeded:'ถึงวงเงินใช้จ่ายของโครงการ ให้ผู้ดูแลตรวจ Project spend limit',
+  organization_usage_limit_exceeded:'ถึง usage limit ที่ OpenAI กำหนด ตรวจ Limits หรือติดต่อ Support',
+  usage_limit_exceeded:'ถึงข้อจำกัดการใช้ API ตรวจเครดิต วงเงิน และ Usage Limits',
+  insufficient_quota:'บัญชี API ไม่มีเครดิตหรือถึงวงเงินแล้ว ตรวจ Billing/Usage ของบัญชี',
+  billing_hard_limit_reached:'ถึงวงเงินใช้ API ให้ผู้ดูแลตรวจ Billing limit',
+  rate_limit_exceeded:'คำขอหรือ tokens เกิน rate limit ลดข้อมูลและเว้นช่วงก่อนเรียกใหม่',
+  slow_down:'ความถี่คำขอเพิ่มเร็วเกินไป เว้นช่วงตาม Retry-After แล้วลองใหม่',
+};
 const fail=(message,status=400,errorCode)=>{const error=new Error(message);error.safe=true;error.status=status;error.errorCode=errorCode;throw error;};
 const reply=(body,status=200)=>Response.json(body,{status,headers:HEADERS});
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
@@ -93,11 +105,10 @@ export async function handleAiRequest(request,fetchImpl=fetch,{timeoutMs=45000}=
       let errorCode;
       try {
         const diagnostic=await readJson(upstream,65536);
-        const code=diagnostic?.error?.code||diagnostic?.error?.type;
-        if(['insufficient_quota','billing_hard_limit_reached','rate_limit_exceeded'].includes(code))errorCode=code;
+        errorCode=[diagnostic?.error?.code,diagnostic?.error?.type].find(code=>typeof code==='string'&&Object.hasOwn(ERROR_HINTS,code));
       }catch{/* Provider details are deliberately discarded. */}
       fail(status===401?'API Key ไม่ถูกต้องหรือถูกยกเลิก':status===403?'คีย์นี้ไม่มีสิทธิ์เรียกโมเดล/รายการ':status===429?
-        ['insufficient_quota','billing_hard_limit_reached'].includes(errorCode)?'บัญชี API ไม่มีเครดิตหรือถึงวงเงินแล้ว ตรวจ Billing/Usage ของบัญชี':'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':
+        errorCode?ERROR_HINTS[errorCode]+' ('+errorCode+')':'เกิน quota หรือ rate limit ตรวจบัญชีแล้วลองใหม่':
         status===400?'ผู้ให้บริการไม่รับคำขอ/โมเดลนี้ ตรวจสิทธิ์หรือเปลี่ยนโมเดล':'ผู้ให้บริการยังไม่พร้อม ลองใหม่ภายหลัง',[400,401,403,429].includes(status)?status:502,errorCode);
     }
     let raw;

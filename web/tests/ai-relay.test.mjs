@@ -99,3 +99,12 @@ test('known billing-quota code is distinguished from rate limiting without provi
  assert.match(body.error,/เครดิต|วงเงิน/);
  assert.equal(JSON.stringify(body).includes(secret),false);
 });
+
+test('current OpenAI credit and organization/project limit codes remain actionable and safe',async()=>{
+ for(const code of ['credit_balance_exhausted','organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded','slow_down']) {
+  const response=await relay.handleAiRequest(request({provider:'openai',action:'models'}),async()=>Response.json({error:{code,type:'insufficient_quota',message:secret}},{status:429}));
+  const body=await response.json();
+  assert.equal(body.errorCode,code);
+  assert.equal(JSON.stringify(body).includes(secret),false);
+ }
+});
