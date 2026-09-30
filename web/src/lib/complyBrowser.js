@@ -28,7 +28,7 @@ function docxTables(office) {
     if(rows.length>10000)throw new Error('ตารางมีเกิน 10,000 แถว');
     const {index,score}=headerIndex(rows),headers=rows[index]?.cells;
     if(!headers||headers.length<2||headers.length>12)return [];
-    return [{id:'docx:'+tableIndex,format:'docx',tableIndex,headerRow:index,score,headers,rows:rows.slice(index+1)}];
+    return [{id:'docx:'+tableIndex,format:'docx',tableIndex,headerRow:index,score,headers,allRows:rows,rows:rows.slice(index+1)}];
   });
 }
 function columnIndex(ref) {
@@ -60,7 +60,8 @@ function xlsxTable(office) {
   if(offset<0)throw new Error('ไม่พบหัวตารางในแผ่นงานแรก');
   const headers=rawHeader.slice(offset);
   if(headers.length<2||headers.length>12)throw new Error('หัวตารางต้องมี 2–12 คอลัมน์');
-  return {id:'xlsx:0',format:'xlsx',headers,score,headerRow:index,sheetPath,sheetName:sheetInfo?.getAttribute('name')||'Sheet 1',columnOffset:offset,rows:rows.slice(index+1).map(r=>({...r,cells:r.cells.slice(offset,offset+headers.length)}))};
+  const allRows=rows.map(r=>({...r,cells:r.cells.slice(offset)}));
+  return {id:'xlsx:0',format:'xlsx',headers,score,headerRow:index,sheetPath,sheetName:sheetInfo?.getAttribute('name')||'Sheet 1',columnOffset:offset,allRows,rows:allRows.slice(index+1)};
 }
 function pdfHeaderItems(page) {
   const anchors=page.items.filter(item=>/รายละเอียด|ข้อกำหนด|เอกสารอ้างอิง|เปรียบเทียบ|ลำดับ|เลขข้อ|requirement|propos|reference|result|comparison|status|clause|\bno\b/i.test(item.text)&&item.box[1]<.4);
@@ -117,8 +118,8 @@ export async function readComplyDocument(file) {
   return {format,tables:[{id:'pdf:0',format:'pdf',headers,headerRow:0,score:headerScore(headers),rows}],defaultTableId:'pdf:0',template,pages,pdfLayout:layout};
 }
 export async function templateForSource(file,prepared,table) {
-  if(prepared.format!=='docx')return prepared.template;
+  if(prepared.format==='pdf')return prepared.template;
   const {readTemplate}=await import('./templateBrowser');
-  return readTemplate(file,{tableIndex:table.tableIndex,headerRow:table.headerRow,intake:true});
+  return readTemplate(file,{tableIndex:table.tableIndex,headerRow:table.headerRow,sheetPath:table.sheetPath,xlsxTable:prepared.format==='xlsx'?table:undefined,intake:true});
 }
 export {inferSourceMapping};

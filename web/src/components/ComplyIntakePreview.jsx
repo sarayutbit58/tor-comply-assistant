@@ -5,13 +5,17 @@ export function ComplyIntakePreview({prepared,onReady}) {
   const first=prepared.tables.find(t=>t.id===prepared.defaultTableId);
   const [tableId,setTableId]=useState(first.id),[mapping,setMapping]=useState(()=>inferSourceMapping(first.headers));
   const [included,setIncluded]=useState(()=>prepared.tables.filter(t=>compatibleTable(t,first)).map(t=>t.id));
+  const [headerRows,setHeaderRows]=useState(()=>Object.fromEntries(prepared.tables.map(t=>[t.id,t.headerRow])));
   const [layout,setLayout]=useState(prepared.pdfLayout),[confirmed,setConfirmed]=useState(false);
   const pdfRows=useMemo(()=>{
     if(prepared.format!=='pdf')return null;
     try{return {rows:pdfTableRows(prepared.pages,layout),error:null};}
     catch(error){return {rows:[],error:error.message};}
   },[prepared,layout]);
-  const tables=useMemo(()=>pdfRows?prepared.tables.map(t=>({...t,rows:pdfRows.rows})):prepared.tables,[prepared,pdfRows]);
+  const tables=useMemo(()=>pdfRows?prepared.tables.map(t=>({...t,rows:pdfRows.rows})):prepared.tables.map(t=>{
+    const headerRow=headerRows[t.id],headers=t.allRows?.[headerRow]?.cells||t.headers;
+    return {...t,headerRow,headers,rows:t.allRows?t.allRows.slice(headerRow+1):t.rows};
+  }),[prepared,pdfRows,headerRows]);
   const main=tables.find(t=>t.id===tableId)||tables[0];
   const selected=useMemo(()=>tables.filter(t=>included.includes(t.id)&&compatibleTable(t,main)),[tables,included,main]);
   const parsed=useMemo(()=>{
@@ -29,6 +33,10 @@ export function ComplyIntakePreview({prepared,onReady}) {
   return <div className="intake-preview">
     <div className="intake-preview-heading"><strong>อ่านหัวตารางแล้ว · {parsed.requirements.length} ข้อ TOR</strong><span>คำตอบและผลเดิมถูกละไว้</span></div>
     {prepared.format==='xlsx'&&<p className="muted">แผ่นงานแรกที่อ่าน: {main.sheetName}</p>}
+    {prepared.format!=='pdf'&&main.allRows&&<label className="form-label">แถวหัวตาราง<select className="form-input" value={main.headerRow} onChange={e=>{
+      const index=Number(e.target.value),headers=main.allRows[index].cells;
+      setHeaderRows(rows=>({...rows,[main.id]:index}));setMapping(inferSourceMapping(headers));setConfirmed(false);
+    }}>{main.allRows.slice(0,30).map((row,i)=><option key={i} value={i}>แถว {row.row} · {row.cells.filter(Boolean).join(' | ').slice(0,100)||'แถวว่าง'}</option>)}</select></label>}
     {tables.length>1&&<>
       <label className="form-label">ตารางหลักสำหรับแม่แบบ<select className="form-input" value={tableId} onChange={e=>choose(e.target.value)}>{tables.map((t,i)=><option key={t.id} value={t.id}>ตาราง {i+1} · {t.rows.length} แถว</option>)}</select></label>
       <fieldset className="intake-tables"><legend>นำเข้าตารางที่ใช้หัวคอลัมน์เดียวกัน</legend>{tables.filter(t=>compatibleTable(t,main)).map(t=><label key={t.id}><input type="checkbox" checked={included.includes(t.id)} disabled={t.id===tableId} onChange={e=>{setIncluded(ids=>e.target.checked?[...ids,t.id]:ids.filter(id=>id!==t.id));setConfirmed(false);}}/>ตาราง {tables.indexOf(t)+1} · {t.rows.length} แถว</label>)}</fieldset>

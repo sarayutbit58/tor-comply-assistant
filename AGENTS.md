@@ -15,7 +15,7 @@
 8. Preserve the review gates and invalidation paths when requirements, selections, responses, evidence, or source files change. A pass must remain traceable to the selected offerings and actual cited text.
 9. Preserve persisted projects. The existing storage key intentionally still contains `v2` while the schema is version 3. Use migrations; changing keys or clearing storage is not a migration.
 10. Keep binary files in IndexedDB through `localFiles.js`. Use dynamic imports for PDF/OCR/Office/archive libraries at the point of use. Preserve error handling and worker/document cleanup.
-11. Preserve the single-template/three-export workflow. Keep Excel editable and filterable, preserve native DOCX structure where supported, and expose cross-format limitations in the preview. Source templates contribute layout, not old answers.
+11. Preserve the single-source/three-export workflow. A Comply table can supply explicitly selected clause-number/TOR columns and layout in one intake; standalone templates supply layout. Old proposals/verdicts/references never initialize answers or evidence. Keep Excel filterable and supported native DOCX structure intact.
 
 ## Work and delivery
 

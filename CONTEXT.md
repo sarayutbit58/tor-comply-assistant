@@ -2,7 +2,7 @@
 
 Audience: coding agents and maintainers. Read this for the code map; use [the approved scope](docs/enhancement-scope.md) for product decisions.
 
-Last updated: 2026-09-30 (Asia/Bangkok). Code inspected at `95f5960`; this handoff adds documentation only. Paths below are relative to the repository root.
+Last updated: 2026-09-30 (Asia/Bangkok). Intake change reviewed through `ad283ea`; see the dated QA record for actual tested revisions. Paths below are relative to the repository root.
 
 ## 1. Overview and quick reference
 
@@ -26,6 +26,7 @@ Local storage does not imply a fully offline/PWA implementation. Do not claim of
 | 2026-09-29 | Fixed duplicate clauses, mixed DOCX extraction, OCR-page races, CropBox annotation geometry, and unsaved-export handling | Baseline `4b4be0a`; parser, OCR, geometry, and export modules |
 | 2026-09-29 | Added notebook three-pane workflow, shared evidence, product/service selection, rules, templates, and portable projects; fixed review findings | Code through `95f5960`; [QA record](docs/qa-2026-09-29.md) |
 | 2026-09-30 | Added agent entry instructions and architectural handoff; expanded approved requirements from the user interview | `AGENTS.md`, `CONTEXT.md`, `docs/enhancement-scope.md`, README pointer |
+| 2026-09-30 | One Comply source file now supplies selected TOR/number columns and the template; preview, text-only PDF table geometry, DOCX/XLSX table mapping, shared-file protection | `complyIntake.mjs`, `complyBrowser.js`, `pdfTableGrid.mjs`, `ComplyIntakePreview.jsx`, `HomeClient.jsx`; [intake QA](docs/qa-2026-09-30-intake.md) |
 
 At the last recorded delivery, `95f5960` was pushed to `main` and its Vercel deployment succeeded. Verify current Git/deployment state for a new publishing task.
 
@@ -34,7 +35,8 @@ At the last recorded delivery, `95f5960` was pushed to `main` and its Vercel dep
 | File or directory | Purpose / change here when… |
 |---|---|
 | `web/src/app/page.jsx`, `project/[id]/page.jsx` | Home and project route entry points |
-| `components/HomeClient.jsx` | Project creation, original TOR import, archive restore, project deletion |
+| `components/HomeClient.jsx` | Comply-table source/template intake, original TOR import, archive restore, project deletion |
+| `components/ComplyIntakePreview.jsx` | Explicit source-column/table selection, PDF boundaries, extracted-clause preview and mapping confirmation |
 | `components/ProjectClient.jsx` | Three-pane workbench orchestration, clause/document navigation, OCR, review and export actions |
 | `components/ClauseResponse.jsx` | Selected offerings, proposal editing, per-clause mode, suggested/manual result |
 | `components/PdfStage.jsx` | Page rendering, zoom, box selection, shared clause overlays |
@@ -47,6 +49,7 @@ At the last recorded delivery, `95f5960` was pushed to `main` and its Vercel dep
 | `store/projectStore.js` | Persisted mutations, schema migration hook, invalidation, assessment application |
 | `lib/projectModel.mjs` | Roles/statuses, shared links, migrations, pass/export guards, file inventory |
 | `lib/torModel.mjs`, `docxBrowser.js`, `docxLimits.mjs` | TOR parsing, duplicate detection, ordered DOCX extraction and size limits |
+| `lib/complyIntake.mjs`, `complyBrowser.js`, `pdfTableGrid.mjs` | Selected-cell extraction; DOCX direct rows, sparse XLSX cells, text-PDF table geometry; old-answer exclusion |
 | `lib/complianceRules.mjs` | Normalization, keywords, polarity, units, dimensions, intervals, verdict checks |
 | `lib/evidenceSearch.mjs` | Offering ranking, page/line candidates, box text, selected-offering assessment |
 | `lib/pdfBrowser.js` | PDF loading, text/geometry extraction, rendering and page OCR image |
@@ -71,8 +74,8 @@ IndexedDB database: **`tor-comply-files-v1`**, object store **`files`**, databas
 
 | Entity | Core fields | Relationship / meaning |
 |---|---|---|
-| Project | `id, name, domain, mode, schemaVersion, torDocId, torFilename, requirements, products, docs, evidence, rows, template, unreadablePages, ocrPages` | Root metadata; binary content lives separately |
-| Requirement | `id, title, textSnapshot, sourcePage, sourceMethod, reviewed, duplicateOf?` | ID is the clause label; `sourcePage` is a physical PDF page, or null for DOCX/manual text |
+| Project | `id, name, domain, mode, schemaVersion, torDocId, torFilename, sourceType?, sourceTable?, requirements, products, docs, evidence, rows, template, unreadablePages, ocrPages` | Root metadata; `sourceType='comply-table'` has a shared original/template file |
+| Requirement | `id, title, textSnapshot, sourcePage, sourceMethod, reviewed, duplicateOf?, sourceTableId?, sourceTableIndex?, sourceRow?` | ID is the clause label; table intake uses `sourceMethod='table-text'` and records its source row/table |
 | Offering | `id, kind, name`; product `brand/model`; service `provider/endpoints/bandwidth` | Both kinds intentionally live in `project.products` |
 | Document | `id, name, role, itemIds, pageCount, searchText` | Evidence documents belong to one or more offerings; bidder evidence can represent company qualifications |
 | Evidence mark | `id, docId, pdfPage, printedPage, box, quote, keyword, requirementIds, sourceMethod, reviewed` | One physical region can be shared by multiple clauses |
@@ -83,6 +86,10 @@ IndexedDB database: **`tor-comply-files-v1`**, object store **`files`**, databas
 `box = [x, top, width, height]` uses fractions of the rendered visible page with a top-left origin. `pdfPage` is one-based. `printedPage` is a user-entered label, not an array index. PDF export maps the box through the original CropBox.
 
 Use `linkedRequirements`, `selectedItems`, `evidenceFor`, and `projectFileIds` rather than assuming legacy singular fields. Migrations preserve old `requirementId/productId` data through these helpers.
+
+For Comply-table intake, `torDocId` and `template.id` initially reference the **same** IndexedDB Blob. `projectFileIds` deduplicates it. Replacing a template must retain that Blob while it remains the TOR source. Additive source metadata uses the existing schema version 3.
+
+Intake reads only the chosen TOR and number columns. Old answers remain visible only in the original file; response rows are newly initialized. DOCX compatible tables retain `sourceTableIndex` for native export; recognized but unselected Comply tables are excluded so their old responses cannot leak into output. Direct table-row indexing must agree between intake, template extraction, and export, including nested prefix tables.
 
 Portable archive: extension **`.torproj`**, ZIP format marker **`tor-comply-project`**, manifest version **1**. It contains project metadata, every referenced original, and page metadata. File descriptors record byte count and SHA-256. Restore validates structure/references/bytes, remaps project/file/mark IDs, and stages blobs with rollback on failure. These checks establish integrity, not the authenticity of third-party claims.
 
@@ -127,7 +134,8 @@ Choose checks by the changed boundary:
 |---|---|
 | Rules / ranking | Numeric units/dimensions, exact speed lists, polarity, missing/conflicting proof, joint evidence; corresponding Node tests |
 | Store / review / UI | Reproduce edit → invalidate → review → confirm; single/project Auto gates; clause navigation and shared unlink |
-| Parsing / OCR | Clause IDs/source page, duplicate handling, mixed paragraphs/tables, captured OCR page and explicit review |
+| Parsing / intake | Empty/filled/reordered source tables, sparse cells, inline/separate numbers, continuation pages, nested/multiple tables, old-answer exclusion, shared source/template archive |
+| OCR (separate scope) | Captured page and explicit review; current Comply intake requires text-readable files and does not add OCR |
 | Archive | Complete originals, new project IDs, shared references, round trip, corrupt/missing bytes and rollback |
 | Template / exports | Native prefixes/header/footer, sentinel old-answer exclusion, column mapping, colors, editable Excel, long PDF pagination; inspect actual artifacts |
 | Documentation | Read referenced files, verify relative links/path names, review scope consistency, `git diff --check` |
@@ -148,7 +156,8 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 - Evidence highlighting uses PDF. DOCX TOR displays extracted clause text and offers the original download; it does not emulate Word pagination.
 - Rotated evidence-page annotation export is rejected. Preserve the visible error until rotation-aware geometry is implemented and verified.
 - Deterministic rules cover known vocabulary and conditions, not every TOR sentence. Unsupported/ambiguous proof needs review; AI integration remains a future decision.
-- Template import is not a general-purpose Office/PDF converter: native DOCX uses the selected table; XLSX uses the first worksheet structure; PDF uses first-page geometry/style. Complex/scanned layouts may require manual mapping.
+- Template import is not a general-purpose Office/PDF converter. Comply intake supports compatible DOCX tables, the first XLSX worksheet, and text-PDF column geometry. Mixed table layouts require choosing the appropriate group/columns; PDF boundaries can be corrected in preview.
+- OCR enhancement is deferred for this intake request. The new path rejects PDF pages with no text layer; existing OCR in the independent TOR/evidence workflow remains as previously implemented.
 - `validateProfile` currently requires the TOR and proposal fields, with 2–12 columns. A submission template should also retain comparison/reference columns from the approved scope; do not assume the validator guarantees every output field.
 - Single files are limited to 40 MB in the UI, and archive originals to 160 MB. The maximum-size archive has not been load-tested.
 - Clearing site storage can delete local projects. The portable archive is the transfer/backup mechanism.

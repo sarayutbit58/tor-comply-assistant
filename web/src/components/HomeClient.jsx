@@ -37,7 +37,8 @@ export function HomeClient() {
       if(sourceType==='comply-table') {
         if(!selection?.confirmed||selection.error||!selection.requirements.length)throw new Error('ตรวจ preview และยืนยันคอลัมน์เลขข้อ/ข้อกำหนดก่อน');
         const {templateForSource}=await import('@/lib/complyBrowser');
-        const base=selection.main.id===prepared.defaultTableId?prepared.template:await templateForSource(file,prepared,selection.main);
+        const originalTable=prepared.tables.find(t=>t.id===selection.main.id);
+        const base=selection.main.id===prepared.defaultTableId&&selection.main.headerRow===originalTable.headerRow?prepared.template:await templateForSource(file,prepared,selection.main);
         const columns=base.profile.columns.map((col,i)=>({...col,field:i===selection.mapping.textColumn?'requirement':i===selection.mapping.numberColumn?'number':['number','requirement'].includes(col.field)?'proposal':col.field}));
         for(const field of ['proposal','comparison','references'])if(!columns.some(c=>c.field===field))columns.push(structuredClone(DEFAULT_PROFILE.columns.find(c=>c.field===field)));
         const profile={...base.profile,columns};validateProfile(profile);
