@@ -127,3 +127,5 @@ input[type=checkbox] { accent-color:var(--brand); }
 .workbench .mark-editor { max-height:40%; font-size:12px; }
 .workbench .mark-editor textarea { font-size:12px; }
 .workbench .mark-editor .muted { font-size:11px; }
+.evidence-association { display:flex; flex-direction:column; gap:3px; max-height:64px; overflow:auto; padding:6px 10px; border-bottom:1px solid var(--line); font-size:11px; color:var(--muted); }
+.evidence-association strong { color:var(--ink); }

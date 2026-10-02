@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {getFile} from '@/lib/localFiles';
-export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,focusBox,onPageCount}) {
+export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,focusBox,onPageCount,selectionLabel='ลากกรอบเพื่อผูกหลักฐาน'}) {
   const canvasRef=useRef(null),stageRef=useRef(null),scrollRef=useRef(null),dragRef=useRef(null);
   const [pdf,setPdf]=useState(null),[painter,setPainter]=useState(null),[selection,setSelection]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[zoom,setZoom]=useState(1);
   useEffect(()=>{setSelection(null);dragRef.current=null;},[resetToken,docId,pageNumber]);
@@ -37,7 +37,7 @@ export default function PdfStage({docId,pageNumber=1,marks=[],resetToken,onBox,f
   function start(event){if(!onBox||!pdf||busy||error)return;event.preventDefault();dragRef.current=point(event);stageRef.current.setPointerCapture(event.pointerId);setSelection([...dragRef.current,0,0]);onBox(null);}
   function finish(event){if(!dragRef.current)return;const box=between(dragRef.current,point(event));dragRef.current=null;if(box[2]>.005&&box[3]>.005){setSelection(box);onBox(box);}else{setSelection(null);onBox(null);}}
   return <div className="pdf-viewer">
-    <div className="pdf-tools"><span>{busy?'กำลังแสดง…':onBox?'ลากกรอบเพื่อผูกหลักฐาน':'เอกสารต้นฉบับ'}</span><button aria-label="ย่อ PDF" onClick={()=>setZoom(z=>Math.max(.75,z-.25))} disabled={zoom<=.75}>−</button><span>{Math.round(zoom*100)}%</span><button aria-label="ขยาย PDF" onClick={()=>setZoom(z=>Math.min(3,z+.25))} disabled={zoom>=3}>+</button><button onClick={()=>setZoom(1)}>พอดีช่อง</button></div>
+    <div className="pdf-tools"><span>{busy?'กำลังแสดง…':onBox?selectionLabel:'เอกสารต้นฉบับ'}</span><button aria-label="ย่อ PDF" onClick={()=>setZoom(z=>Math.max(.75,z-.25))} disabled={zoom<=.75}>−</button><span>{Math.round(zoom*100)}%</span><button aria-label="ขยาย PDF" onClick={()=>setZoom(z=>Math.min(3,z+.25))} disabled={zoom>=3}>+</button><button onClick={()=>setZoom(1)}>พอดีช่อง</button></div>
     {error&&<p role="alert" className="error-message">{error}</p>}
     <div ref={scrollRef} className="pdf-scroll">
       {docId?<div ref={stageRef} className={'pdf-stage '+(onBox?'selectable':'')} style={{width:zoom*100+'%'}} onPointerDown={start} onPointerMove={e=>{if(dragRef.current)setSelection(between(dragRef.current,point(e)));}} onPointerUp={finish} onPointerCancel={()=>{dragRef.current=null;setSelection(null);onBox?.(null);}}>
