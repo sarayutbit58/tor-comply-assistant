@@ -30,3 +30,5 @@ Actual draft probes passed: source transcription, new offering name and template
 Visual observation found the new manage-offerings button sharing a line with the bidder-scope checkbox. Added a block layout for these controls. Removed duplicate status/download messages inside tool panels, and keyed the project client by project ID so retained tool drafts cannot transfer across project routes. These follow-ups require the next cloud revision/UI check.
 
 Figma Free browser review verified the template view. The source-correction warning overlapped the confirmation line; changed that single text layer to Auto height through the ordinary Figma UI (node 9:945, state confirmed). API quota remains exhausted; no paid upgrade used.
+
+Compact source-page tools now also require their physical target page to be displayed before adding a transcription or confirming whole-page coverage. Reading/"show page" remains available to align the center viewer; a retained draft cannot be attached or completed while inspecting another page. This preserves the old separate-preview safety boundary after removing that duplicated canvas.
