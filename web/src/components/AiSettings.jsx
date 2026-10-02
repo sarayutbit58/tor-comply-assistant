@@ -62,7 +62,7 @@ export function AiSettings() {
     <button className="outline-button" onClick={()=>aiSession.clear()}>ล้างคีย์และการเชื่อมต่อทั้งหมด</button>
   </div>;
 }
-export function AiSettingsButton() {
+export function AiSettingsButton({onOpen}={}) {
   const [open,setOpen]=useState(false);
-  return <><button className="outline-button" onClick={()=>setOpen(true)}>AI / API Keys</button>{open&&<WorkspaceDialog title="AI สำหรับช่วงทดสอบ" onClose={()=>setOpen(false)} wide><AiSettings/></WorkspaceDialog>}</>;
+  return <><button className="outline-button" onClick={()=>onOpen?onOpen():setOpen(true)}>AI / API Keys</button>{open&&!onOpen&&<WorkspaceDialog title="AI สำหรับช่วงทดสอบ" onClose={()=>setOpen(false)} wide><AiSettings/></WorkspaceDialog>}</>;
 }

@@ -5,7 +5,7 @@ import {useProjectStore} from '@/store/projectStore';
 import {putFile,deleteFile,getFile} from '@/lib/localFiles';
 import {FILE_ROLES} from '@/lib/projectModel.mjs';
 import {downloadBlob} from '@/lib/download';
-export function LibraryManager({project,run,busy,onTemplate}) {
+export function LibraryManager({project,run,busy,onTemplate,compact=false,view='offerings',onViewChange}) {
   const [kind,setKind]=useState('product'),[role,setRole]=useState(''),[items,setItems]=useState([]),[editingItem,setEditingItem]=useState(null),[editingDoc,setEditingDoc]=useState(null);
   const actions=useProjectStore.getState();
   async function addItem(event){
@@ -36,7 +36,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
     },'อ่านและจัดประเภทไฟล์แล้ว');
   }
   const linkedItems=project.products.filter(i=>role==='bidder'||i.kind===role);
-  return <div className="library-grid"><section>
+  return <div className={'library-grid'+(compact?' library-compact':'')}>{compact&&<div className="segmented library-section-tabs"><button aria-pressed={view==='offerings'} disabled={busy} onClick={()=>onViewChange?.('offerings')}>สินค้า / บริการ</button><button aria-pressed={view==='documents'} disabled={busy} onClick={()=>onViewChange?.('documents')}>เอกสาร / จัดกลุ่ม</button></div>}<section hidden={compact&&view!=='offerings'}>
     <div className="segmented"><button aria-pressed={kind==='product'} onClick={()=>setKind('product')}>สินค้า</button><button aria-pressed={kind==='service'} onClick={()=>setKind('service')}>บริการ</button></div>
     <form key={kind} className="stack-form" onSubmit={addItem}>
       <label className="form-label">ชื่อ{kind==='product'?'สินค้า':'บริการ'}<input className="form-input" name="name" required maxLength={160}/></label>
@@ -49,7 +49,7 @@ export function LibraryManager({project,run,busy,onTemplate}) {
     </form>
     <div className="item-list">{project.products.filter(i=>i.kind===kind).map(item=><div key={item.id}><div><strong>{item.name}</strong><small>{[item.brand,item.model,item.provider,item.bandwidth,item.endpoints].filter(Boolean).join(' · ')}</small></div><button className="text-button" disabled={busy} onClick={()=>setEditingItem(item.id)}>แก้ไข</button><DeleteButton disabled={busy} confirmation="ยืนยันลบรายการ" onConfirm={()=>run(async()=>actions.removeProduct(project.id,item.id),'ลบรายการแล้ว · ย้อนกลับจากหน้าทำงานได้')}/></div>)}</div>
     {editingItem&&project.products.find(i=>i.id===editingItem)&&<OfferingEditor key={editingItem} item={project.products.find(i=>i.id===editingItem)} busy={busy} onCancel={()=>setEditingItem(null)} onSave={patch=>run(async()=>{actions.updateProduct(project.id,editingItem,patch);setEditingItem(null);},'แก้รายการแล้ว ผลที่เกี่ยวข้องถูกยกเลิก')}/>}
-  </section><section>
+  </section><section hidden={compact&&view!=='documents'}>
     <h3>จัดประเภทเอกสาร</h3><p className="muted">TOR และแม่แบบจะไม่ถูกนำมาค้นเป็นหลักฐาน</p>
     <form className="stack-form" onSubmit={upload}>
       <label className="form-label">ประเภทไฟล์<select className="form-input" required value={role} onChange={e=>{setRole(e.target.value);setItems([]);}}><option value="">เลือกประเภทไฟล์…</option>{Object.entries(FILE_ROLES).filter(([id])=>id!=='tor').map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>

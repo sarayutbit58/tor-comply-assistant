@@ -178,6 +178,13 @@ Original examples and the brand manual are supplied outside the Git checkout in 
 
 Load only the landmarks needed for the task after this handoff. Keep approved behavior in the scope document, architecture/status in this file, and dated observations in a QA record. A new user decision changes the relevant source of truth; it does not require duplicating the whole interview across documents.
 
+### One-window Figma/UI enhancement — 2026-10-02
+
+- Active work is specified in [one-window-workbench-design.md](docs/one-window-workbench-design.md), with current gates in [qa-one-window-workbench.md](docs/qa-one-window-workbench.md). The user requires Figma Free Plan only and supplied local examples for layout/evidence patterns.
+- `WorkbenchDock.jsx` replaces project tool dialogs with a keyboard-navigable inline dock beneath the persistent table. Visited panels retain drafts. Library/SourcePageTools/ReadingRepair have compact project variants; source repair reuses the center TOR viewer and blocks acceptance if the displayed page differs.
+- The project AI button opens the inline settings panel; the standalone Home button retains its setup dialog. Business storage schema, file roles, rules and review invalidation are unchanged.
+- Five editable Figma frames were created. The Starter MCP quota prevents further API edits/screenshots/design-context retrieval; browser UI remains usable. Implementation and current UI/deployment gates remain in progress; the prior 197-test QA is not UI acceptance for this redesign.
+
 ## Keyless Copilot implementation handoff — updated 2026-10-01
 
 - Pure boundaries: `readingModel.mjs`, `projectMutations.mjs`, `workflowModel.mjs`, `localOcr.mjs`, `docxNumbering.mjs`, `xlsxSourceRows.mjs`.
