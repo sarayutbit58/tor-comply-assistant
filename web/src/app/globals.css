@@ -112,6 +112,8 @@ input[type=checkbox] { accent-color:var(--brand); }
 .dock-content>div { padding:12px; }
 .dock-content [hidden] { display:none!important; }
 .dock-content .response-editor { padding:0; border:0; max-height:none; min-height:0; overflow:visible; font-size:12px; }
+.dock-content .response-editor>label.muted { display:block; }
+.dock-content .response-editor>button.text-button { display:block; margin:7px 0; }
 .dock-content :is(.form-label,.response-editor .form-label,.response-editor summary) { font-size:12px; }
 .dock-content :is(.form-input,.muted,.notice,.error-message,.intake-confirm,.check-list,.item-list,.file-inventory) { font-size:12px; }
 .dock-content .library-compact { display:block; }

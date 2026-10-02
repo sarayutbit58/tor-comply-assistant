@@ -20,3 +20,13 @@ Status: implementation in progress; acceptance unproven. Date: 2026-10-02, Asia/
 6. Three table formats, annotated evidence and portable archive remain reachable with the existing review gates.
 7. Inspect the Figma correction/files/settings states and a prototype tab transition under the Free Plan; repair any observed overlap through supported Free Plan UI if needed.
 8. Record current cloud build/deployment, actual screenshots and any unverified boundary before final handoff. Preserve the unrelated root README change.
+
+## Current browser observations
+
+Code `1a78ba5` reached production READY in deployment `dpl_CPV9sPgCGxAxnTXShDD1vnFbExuH`. Existing synthetic project `cf318f3d-91d7-4e8e-b64e-22c3abf8a83b` retained both Comply rows and its shared reviewed proof. At 1366×900, each work surface was 709px tall (table 504px, TOR 378px, proof 378px); the file tool opened beneath the table with zero dialogs.
+
+Actual draft probes passed: source transcription, new offering name and template heading survive switching tools. The compact source tool kept exactly two document canvases. AI settings open in the dock with empty credentials. ArrowRight selects TOR, End selects AI and Home returns to the answer tab.
+
+Visual observation found the new manage-offerings button sharing a line with the bidder-scope checkbox. Added a block layout for these controls. Removed duplicate status/download messages inside tool panels, and keyed the project client by project ID so retained tool drafts cannot transfer across project routes. These follow-ups require the next cloud revision/UI check.
+
+Figma Free browser review verified the template view. The source-correction warning overlapped the confirmation line; changed that single text layer to Auto height through the ordinary Figma UI (node 9:945, state confirmed). API quota remains exhausted; no paid upgrade used.

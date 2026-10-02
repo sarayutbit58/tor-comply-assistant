@@ -218,9 +218,6 @@ export function ProjectClient({projectId}){
           <h3>เพิ่มข้อ TOR</h3><div className="form-grid"><label className="form-label">เลขข้อ<input className="form-input" name="number" required pattern="[0-9๐-๙]+([.][0-9๐-๙]+)*" placeholder="5.1"/></label><label className="form-label">หน้า PDF ต้นฉบับ<input className="form-input" name="page" type="number" min="1" max={torCount}/></label></div><label className="form-label">ข้อความตาม TOR<textarea className="form-input" name="text" required rows="4"/></label><button className="dark-button" disabled={busy}>เพิ่มข้อกำหนด</button>
         </form>
       </div>}
-      {message&&<p role={error?'alert':'status'} className={error?'error-message':'notice'}>{message}</p>}
-      {downloadFile&&<a className="text-button" href={downloadFile.href} download={downloadFile.filename}>ดาวน์โหลด {downloadFile.filename}</a>}
-
   </>;}
   if(!mounted)return <div className="loading-workspace">กำลังเปิดพื้นที่ทำงาน…</div>;
   if(!project)return <div className="loading-workspace">ไม่พบโครงการในเครื่องนี้ <Link href="/">กลับหน้าโครงการ</Link></div>;
