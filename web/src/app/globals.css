@@ -101,7 +101,7 @@ input[type=checkbox] { accent-color:var(--brand); }
 .workbench .document-caption,.workbench .pager,.workbench .evidence-tabs button { font-size:12px; }
 .workbench .clause-tools .text-button { font-size:11px; min-height:30px; }
 .workbench .comply-scroll { min-height:140px; }
-.workbench-dock { display:flex; flex-direction:column; flex:0 0 46%; min-height:240px; max-height:60%; min-width:0; border-top:1px solid var(--line); overflow:hidden; }
+.workbench-dock { display:flex; flex-direction:column; flex:0 1 46%; min-height:180px; max-height:60%; min-width:0; border-top:1px solid var(--line); overflow:hidden; }
 .workbench-dock.dock-expanded { flex-basis:60%; }
 .dock-navigation { display:flex; align-items:center; gap:4px; flex:none; padding:6px; background:var(--surface); border-bottom:1px solid var(--line); }
 .dock-tabs { display:flex; gap:4px; min-width:0; flex:1; overflow-x:auto; }
@@ -127,5 +127,16 @@ input[type=checkbox] { accent-color:var(--brand); }
 .workbench .mark-editor { max-height:40%; font-size:12px; }
 .workbench .mark-editor textarea { font-size:12px; }
 .workbench .mark-editor .muted { font-size:11px; }
-.evidence-association { display:flex; flex-direction:column; gap:3px; max-height:64px; overflow:auto; padding:6px 10px; border-bottom:1px solid var(--line); font-size:11px; color:var(--muted); }
+.evidence-association { display:flex; flex-direction:column; flex:none; gap:3px; max-height:64px; overflow:auto; padding:6px 10px; border-bottom:1px solid var(--line); font-size:11px; color:var(--muted); }
 .evidence-association strong { color:var(--ink); }
+@media (max-height:800px) {
+  .workspace-header { padding:8px 14px; }
+  .workspace-header h1 { font-size:17px; }
+  .workspace-status { padding:6px 14px; }
+  .copilot-bar { padding:6px 12px; font-size:11px; }
+  .pane-title { padding:10px; }
+  .evidence-association { max-height:48px; padding:4px 8px; }
+  .workbench .pdf-viewer { min-height:128px; }
+  .workbench .mark-editor { flex:0 1 auto; min-height:80px; max-height:30%; }
+  .workspace-notice { padding:6px 12px; margin-bottom:6px; }
+}
