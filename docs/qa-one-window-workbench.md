@@ -1,6 +1,6 @@
 # One-window workbench QA
 
-Status: implementation in progress; acceptance unproven. Date: 2026-10-02, Asia/Bangkok. Baseline code/docs HEAD: 40faa7f. Scope: [one-window design](one-window-workbench-design.md), existing local-project TOR rules/review/export boundaries.
+Status: scoped workbench acceptance passed. Updated: 2026-10-03, Asia/Bangkok. Verified implementation: bcc8705; baseline: 40faa7f. Scope: [one-window design](one-window-workbench-design.md), existing local-project TOR rules/review/export boundaries. Chronological observations below retain the intermediate failures and fixes.
 
 ## Evidence so far
 
@@ -10,7 +10,7 @@ Status: implementation in progress; acceptance unproven. Date: 2026-10-02, Asia/
 - Added a keyboard-navigable inline task dock, visited-panel draft retention, compact resource/source tools, shared TOR region selection for repair and separate physical/printed reference labels. Optional AI settings use the dock in the project route; Home retains its existing setup dialog.
 - Fresh serial business-model suite: `node --test --test-concurrency=1 --test-reporter=spec web/tests/*.test.mjs`, **197 passed, 0 failed, 0 skipped**. Source JSX/module parse and `git diff --check` passed. These tests establish the preserved model boundaries, not the new UI journeys.
 
-## Required current browser gates
+## Acceptance gates (completed by the final observations below)
 
 1. Existing completed project still opens with table/TOR/proof together; selecting each row navigates both viewers.
 2. Every task tab and rail action stays in the workbench. Table/document headings and original canvases remain visible while editing files/templates/settings/AI.
@@ -44,3 +44,18 @@ Added source-specific region-selection copy after observing the center TOR capti
 Latest code `bad0db4` reached READY in `dpl_DSvun1X7dch9BPpMBCnfGTckdjEy`; fresh final serial suite still passed 197/197. Current browser verified the visible manual association and source-specific crop instruction. It received the real app-generated PDF (8,669 B), DOCX (10,012 B), XLSX (5,917 B), marked proof (30,907 B) and complete archive (59,592 B) from their visible links; current app console error log was empty. Artifact inspection/restore remain pending.
 
 Short-height regression reproduced at 1366×768 after expanding the dock: dock bottom 785.5px exceeded its parent pane bottom 738.5px. Made the dock shrinkable with a lower minimum, compacted short-height chrome and reserved document-viewer space while allowing citation controls to scroll. The role/association caption no longer shrinks away. Verify normal/expanded 1366×768 and 1280×720 after this follow-up build.
+
+## Final verification — 2026-10-03
+
+- Production code `bcc8705` is READY in `dpl_Svv3PUAQ3jzUVyTud1gyaRHiRCxu`, assigned to https://web-ten-teal-31.vercel.app. No local dependency installation was required.
+- Normal and expanded dock at 1366×768 ended at 737.70px inside the pane's 738.50px boundary. Normal and expanded 1280×720 ended at 689.70px inside 690.50px; source/proof viewers retained 430.40px/140.76px. The original short-height clipping symptom is resolved. Final 1366×900 screenshot: ignored `work/one-window-app-verified.jpg`.
+- Fresh `node --test --test-concurrency=1 --test-reporter=spec web/tests/*.test.mjs`: **197 passed, 0 failed, 0 skipped**. `git diff --check` passed. Actual tool, page, review, Undo, output and restoration journeys supplement these pure-model regressions.
+- `work/inspect_ux_outputs.py` passed against received app outputs: one-page PDF with both clauses and 24/48-port text; DOCX with three rows/four columns; XLSX with three rows/four columns, filter A1:D3 and no formula cells; marked proof with shared `6.1, 6.2` label. Archive contains two original files, reviewed rows/shared proof, separate raw/accepted source readings, valid SHA-256 hashes and no credentials.
+- Imported the received `ux-complete.torproj` through Home's actual file chooser. Restored project `9f4de18c-b53e-4765-8b76-238a9eb1d23e` opens with two Comply rows and the original source/proof images. Re-exported it through the visible download link. `work/verify_ux_roundtrip.py` passed: new project/file IDs, byte-identical originals, preserved reviews/shared links and reading/completion history. The original project remains present. Current app console error log was empty.
+- Figma uses one page for all five editable states and the local component board. Normal Free editor/prototype navigation was used after MCP quota exhaustion. The five states and tab transitions were inspected, with two text overlaps repaired. No upgrade, canvas reset or customer-document upload occurred.
+
+## Delivery boundaries
+
+- A local `.fig` backup was not obtained: after the browser extension reconnected as browser 4, binding the existing editor repeatedly failed on focus emulation. The previously saved editable Figma file/prototype is the deliverable; do not claim an exported local copy. One-page construction avoids the need to reset or reassemble the canvas.
+- Figma MCP limits are tied to plan/seat and daily/monthly calls, not canvas size, per [official access/rate-limit documentation](https://developers.figma.com/docs/figma-mcp-server/rate-limits-access/) checked 2026-10-03. Resetting a canvas is not a documented quota reset. Ordinary browser editing remains the chosen Free Plan fallback when connected.
+- OCR accuracy is not guaranteed; the observed Thai technical-token misreading requires human correction. Native Word pagination, native Excel visual rendering, maximum-size archives/large native Blob downloads and full offline startup are unverified. The redesign does not change optional provider health or establish new live API results.

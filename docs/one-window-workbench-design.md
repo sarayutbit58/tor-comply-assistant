@@ -30,10 +30,10 @@ File: https://www.figma.com/design/WF6dtSgmoLFcnfOfZmy9tF/Untitled
 | Template/export mapping | 9:1139 |
 | Project settings | 9:1320 |
 
-Five editable frames share scoped brand variables, text styles and local control/row components. Last successful structural audit showed 166–169 descendants per frame, 35–36 instances, 88–90 text nodes and zero image-filled nodes; 20 cross-frame tool-tab transitions were created. This is an editable prototype, not a complete-UI raster.
+Five editable frames and the component board occupy one page, `TOR Comply — One window`, following the user's Free Plan/one-page decision. They share scoped brand variables, text styles and local control/row components. Last successful structural audit showed 166–169 descendants per frame, 35–36 instances, 88–90 text nodes and zero image-filled nodes; 20 cross-frame tool-tab transitions were created. This is an editable prototype, not a complete-UI raster.
 
 The Starter MCP quota was reached after construction. Further API screenshots/edits and get_design_context are unavailable; ordinary Free Plan browser review remains available. The user has excluded a paid upgrade. A capture ID issued for a baseline web capture was never submitted and created no capture page; no capture output is included.
 
 ## Delivery gates
 
-Implementation and functional/browser visual verification are tracked in [qa-one-window-workbench.md](qa-one-window-workbench.md). Do not close the goal from the Figma structure or existing business-rule tests alone; inspect the new workbench flows and Figma states, record remaining limits, and verify the deployed revision when publishing.
+Implementation through `bcc8705` passed the scoped functional/browser gates on 2026-10-03, including short notebook layouts, local OCR/correction safety, shared-proof metadata/Undo, three table outputs, annotated proof and actual portable-project restoration. See [qa-one-window-workbench.md](qa-one-window-workbench.md) for exact evidence and limitations. Figma's saved one-page file is the artifact; no local `.fig` export was received after the browser connection failed. Canvas reset/reassembly is unnecessary, and cannot be relied on to reset the plan/seat MCP quota.

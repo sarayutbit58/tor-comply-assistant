@@ -2,7 +2,7 @@
 
 Audience: coding agents and maintainers. Read this for the code map; use [the approved scope](docs/enhancement-scope.md) for product decisions.
 
-Last updated: 2026-10-01 (Asia/Bangkok). Keyless Copilot code through `60b019f` has 197 passing regressions, current browser journeys, inspected app-generated artifacts and actual archive restoration; see [current QA](docs/qa-2026-10-01-copilot.md) for evidence and named limits. Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. Historical results do not establish current live-provider health. Paths below are relative to the repository root.
+Last updated: 2026-10-03 (Asia/Bangkok). One-window workbench code through `bcc8705` has 197 passing regressions, actual notebook/tool/page/review journeys, inspected app-generated artifacts and archive restoration; see [current workbench QA](docs/qa-one-window-workbench.md) for evidence and named limits. Earlier [keyless QA](docs/qa-2026-10-01-copilot.md) remains historical. Intake/browser regressions verified through `5c9b182`; API testing code through `d7012e6`; OpenRouter through `8f1e167`. Historical results do not establish current live-provider health. Paths below are relative to the repository root.
 
 ## 1. Overview and quick reference
 
@@ -183,7 +183,8 @@ Load only the landmarks needed for the task after this handoff. Keep approved be
 - Active work is specified in [one-window-workbench-design.md](docs/one-window-workbench-design.md), with current gates in [qa-one-window-workbench.md](docs/qa-one-window-workbench.md). The user requires Figma Free Plan only and supplied local examples for layout/evidence patterns.
 - `WorkbenchDock.jsx` replaces project tool dialogs with a keyboard-navigable inline dock beneath the persistent table. Visited panels retain drafts. Library/SourcePageTools/ReadingRepair have compact project variants; source repair reuses the center TOR viewer and blocks acceptance if the displayed page differs.
 - The project AI button opens the inline settings panel; the standalone Home button retains its setup dialog. Business storage schema, file roles, rules and review invalidation are unchanged.
-- Five editable Figma frames were created. The Starter MCP quota prevents further API edits/screenshots/design-context retrieval; browser UI remains usable. Implementation and current UI/deployment gates remain in progress; the prior 197-test QA is not UI acceptance for this redesign.
+- Five editable Figma frames and local components share one page under the Free Plan. Ordinary browser review verified all states/prototype transitions and repaired two text overlaps after MCP quota exhaustion. No canvas reset or paid upgrade. Local `.fig` backup was not received after the browser connection failed; the saved Figma file remains the deliverable.
+- Implementation `bcc8705` reached production READY. Fresh 197/197 regressions and actual tool/page/review/Undo/output/restore gates passed; normal/expanded 1366×768 and 1280×720 layouts keep the dock inside its pane. Physical/printed pages and manually assigned evidence roles/offerings remain visible. Project clients are keyed by project ID, preserving draft isolation. See current workbench QA for exact artifact and hash evidence, and retained OCR/Word/load limitations.
 
 ## Keyless Copilot implementation handoff — updated 2026-10-01
 
